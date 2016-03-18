@@ -1,5 +1,5 @@
 """
-    drf_jsonapi
+    drfjsonapi
     ~~~~~~~~~~~
 
     Client related DRF serializers.

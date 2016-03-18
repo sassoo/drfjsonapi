@@ -1,5 +1,5 @@
 """
-    drf_jsonapi.renderers
+    drfjsonapi.renderers
     ~~~~~~~~~~~~~~~~~~~~~
 
     DRF renderer that is compliant with the JSON API spec
@@ -120,7 +120,7 @@ class JsonApiRenderer(JSONRenderer):
         there should be no duplicates within the included array
         itself or the primary data.
 
-        The drf_jsonapi `InclusionFilter` adds a private property
+        The drfjsonapi `InclusionFilter` adds a private property
         to the request object named `_inclusion_cache` which
         greatly reduces the complexity of this process.
 
@@ -206,7 +206,7 @@ class JsonApiRenderer(JSONRenderer):
         pager = {}
         request = renderer_context['request']
 
-        # list with drf_jsonapi pager
+        # list with drfjsonapi pager
         if isinstance(data, OrderedDict) and 'pager' in data:
             pager = data['pager']
             data = data['results']

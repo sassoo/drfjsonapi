@@ -1,5 +1,5 @@
 """
-    drf_jsonapi.filters
+    drfjsonapi.filters
     ~~~~~~~~~~~~~~~~~~~
 
     DRF relationship fields to assist with a JSON API spec

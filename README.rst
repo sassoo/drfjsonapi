@@ -1,4 +1,4 @@
-drf_jsonapi
+drfjsonapi
 ======================================
 
 |build-status-image| |pypi-version|
@@ -109,7 +109,7 @@ To build the documentation:
 
 .. _tox: http://tox.readthedocs.org/en/latest/
 
-.. |build-status-image| image:: https://secure.travis-ci.org/sassoo/drf_jsonapi.svg?branch=master
-   :target: http://travis-ci.org/sassoo/drf_jsonapi?branch=master
-.. |pypi-version| image:: https://img.shields.io/pypi/v/drf_jsonapi.svg
+.. |build-status-image| image:: https://secure.travis-ci.org/sassoo/drfjsonapi.svg?branch=master
+   :target: http://travis-ci.org/sassoo/drfjsonapi?branch=master
+.. |pypi-version| image:: https://img.shields.io/pypi/v/drfjsonapi.svg
    :target: https://pypi.python.org/pypi/drfjsonapi

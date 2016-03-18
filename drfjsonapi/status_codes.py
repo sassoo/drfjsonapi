@@ -1,5 +1,5 @@
 """
-    drf_jsonapi.status_codes
+    drfjsonapi.status_codes
     ~~~~~~~~~~~~~~~~~~~~~~~~
 
     HTTP status map for numeric to logic translation

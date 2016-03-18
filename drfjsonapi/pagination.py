@@ -1,5 +1,5 @@
 """
-    drf_jsonapi.pagination
+    drfjsonapi.pagination
     ~~~~~~~~~~~~~~~~~~~~~~
 
     DRF custom pagination to assist with a JSONAPI spec

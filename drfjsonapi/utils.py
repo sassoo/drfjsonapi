@@ -1,5 +1,5 @@
 """
-    drf_jsonapi.utils
+    drfjsonapi.utils
     ~~~~~~~~~~~~~~~~~
 
     Private & probably shady helper utilities

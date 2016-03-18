@@ -1,5 +1,5 @@
 """
-    drf_jsonapi.exceptions
+    drfjsonapi.exceptions
     ~~~~~~~~~~~~~~~~~~~~~~
 
     DRF exceptions that are JSON API spec compliant.

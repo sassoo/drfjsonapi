@@ -1,5 +1,5 @@
 """
-    drf_jsonapi.serializers
+    drfjsonapi.serializers
     ~~~~~~~~~~~~~~~~~~~~~~~
 
     DRF serializers to assist with a JSON API spec compliant API.

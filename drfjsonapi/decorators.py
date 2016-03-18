@@ -1,5 +1,5 @@
 """
-    drf_jsonapi.decorators
+    drfjsonapi.decorators
     ~~~~~~~~~~~~~~~~~~~~~~
 
     Custom decorators mostly for specialized views

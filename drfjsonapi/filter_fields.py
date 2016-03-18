@@ -1,5 +1,5 @@
 """
-    drf_jsonapi.filter_fields
+    drfjsonapi.filter_fields
     ~~~~~~~~~~~~~~~~~~~~~~~~~
 
     DRF filter fields to assist with a JSONAPI spec compliant

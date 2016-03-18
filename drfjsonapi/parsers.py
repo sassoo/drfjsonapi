@@ -1,5 +1,5 @@
 """
-    drf_jsonapi.parsers
+    drfjsonapi.parsers
     ~~~~~~~~~~~~~~~~~~~
 
     DRF parser that is compliant with the JSON API

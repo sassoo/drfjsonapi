@@ -1,5 +1,5 @@
 """
-    drf_jsonapi.views
+    drfjsonapi.views
     ~~~~~~~~~~~~~~~~~
 
     Custom views mostly for consistent exception handling
