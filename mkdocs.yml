@@ -1,0 +1,4 @@
+site_name: drfjsonapi
+site_description: JSON API reference implementation for Django Rest Framework
+repo_url: https://github.com/sassoo/drfjsonapi
+site_dir: html
