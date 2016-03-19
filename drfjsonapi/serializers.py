@@ -8,15 +8,30 @@
     JsonApiSerializer
 """
 
+from .relations import ResourceRelatedField
 from .utils import _get_resource_url
 from django.core.exceptions import ImproperlyConfigured
+from django.utils.functional import cached_property
 from django.utils.module_loading import import_string
 from rest_framework import serializers
+from rest_framework.relations import ManyRelatedField
 
 
 # pylint: disable=abstract-method
 class JsonApiSerializer(serializers.Serializer):
     """ JSON API Serializer """
+
+    @cached_property
+    def related_field_names(self):
+        """ Return a list of relationship field names """
+
+        names = []
+        for name, field in self.fields.items():
+            if isinstance(field, ManyRelatedField):
+                field = field.child_relation
+            if isinstance(field, ResourceRelatedField):
+                names.append(name)
+        return names
 
     def get_data_links(self, instance):
         """ Return the "Links" object for an individual resource
@@ -29,8 +44,8 @@ class JsonApiSerializer(serializers.Serializer):
             jsonapi.org/format/#document-links
         """
 
-        resource_url = _get_resource_url(self.get_rtype(), instance.id,
-                                         self.context)
+        rtype = self.get_rtype()
+        resource_url = _get_resource_url(rtype, instance.id, self.context)
         return {'self': resource_url}
 
     def get_data_meta(self):
@@ -57,10 +72,10 @@ class JsonApiSerializer(serializers.Serializer):
         readable fields will be returned for your safety.
         """
 
-        readable_fields = self.get_readable_fields()
+        readable = self.get_readable_fields()
         # pylint: disable=no-member
         filter_fields = getattr(self.Meta, 'filter_fields', {})
-        return {k: v for k, v in filter_fields.items() if k in readable_fields}
+        return {k: v for k, v in filter_fields.items() if k in readable}
 
     def get_inclusion_field_names(self):
         """ Return a list of inclusionable field names
@@ -68,19 +83,23 @@ class JsonApiSerializer(serializers.Serializer):
         The serializers `Meta.inclusion_fields` object contains the
         list of inclusionable fields.
 
-        But just in case some bonehead removes the field from the
+        Just in case some bonehead removes the field from the
         serializer or sets it write_only & forgets to remove it
         from the `Meta.inclusion_fields` property this will
         automatically prune them.
+
+        NOTE: if no inclusion_fields meta property is set
+              then all readable related fields are eligable
+              for inclusion
 
         :returns:
             list of string field names
         """
 
-        readable_fields = self.get_readable_fields()
-        # pylint: disable=no-member
-        inclusions = getattr(self.Meta, 'inclusion_fields', [])
-        return [field for field in inclusions if field in readable_fields]
+        readable = self.get_readable_fields()
+        meta = getattr(self, 'Meta')
+        names = getattr(meta, 'inclusion_fields', self.related_field_names)
+        return [name for name in names if name in readable]
 
     def get_readable_fields(self):
         """ Return `fields` but pruned to only readable fields
@@ -133,6 +152,20 @@ class JsonApiSerializer(serializers.Serializer):
                 for key in data.keys():
                     if key not in fields:
                         del data[key]
+
+    def to_internal_value(self, data):
+        """ DRF override for extra helper type stuff
+
+        The meta `create_only_fields` list contains field names
+        which can only be set during create & are not allowed to
+        be mutated after.
+        """
+
+        meta = getattr(self, 'Meta')
+        for field in getattr(meta, 'create_only_fields', ()):
+            if self.instance and field in data:
+                del data[field]
+        return super(JsonApiSerializer, self).to_internal_value(data)
 
     def to_representation(self, instance):
         """ DRF override for consistent representation
