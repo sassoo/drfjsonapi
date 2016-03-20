@@ -37,6 +37,21 @@ def page_not_found(*args, **kwargs):  # pylint: disable=unused-argument
     raise RouteNotFound()
 
 
+def generate_error_object(exc):
+    """ Same order as error members documented in JSON API """
+
+    return {
+        'id': _random_str(),
+        'links': {'about': getattr(exc, 'link', '')},
+        'status': status_codes[exc.status_code],
+        'code': getattr(exc, 'code', exc.__class__.__name__),
+        'title': getattr(exc, 'title', ''),
+        'detail': getattr(exc, 'detail', ''),
+        'source': getattr(exc, 'source', {'pointer': ''}),
+        'meta': getattr(exc, 'meta', {}),
+    }
+
+
 def jsonapi_exception_handler(exc, context):
     """ DRF custom exception handler for a JSON API backend
 
@@ -44,20 +59,6 @@ def jsonapi_exception_handler(exc, context):
     with our own that are more JSON API complete. Generally,
     they are much more informative errors as well.
     """
-
-    def _generate_error_object(exc):
-        """ Same order as error members documented in JSON API """
-
-        return {
-            'id': _random_str(),
-            'links': {'about': getattr(exc, 'link', '')},
-            'status': status_codes[exc.status_code],
-            'code': getattr(exc, 'code', exc.__class__.__name__),
-            'title': getattr(exc, 'title', ''),
-            'detail': getattr(exc, 'detail', ''),
-            'source': getattr(exc, 'source', {}),
-            'meta': getattr(exc, 'metat', {}),
-        }
 
     # import traceback
     # traceback.print_exc(exc)
@@ -82,9 +83,9 @@ def jsonapi_exception_handler(exc, context):
 
     if isinstance(exc, ManyExceptions):
         for _exc in exc.excs:
-            response.data['errors'].append(_generate_error_object(_exc))
+            response.data['errors'].append(generate_error_object(_exc))
     elif isinstance(exc, exceptions.APIException):
-        response.data['errors'].append(_generate_error_object(exc))
+        response.data['errors'].append(generate_error_object(exc))
 
     return response
 

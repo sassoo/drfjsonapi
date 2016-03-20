@@ -75,6 +75,33 @@ class JsonApiRenderer(JSONRenderer):
                 continue
         return relationships
 
+    def get_errors(self, data):
+        """ Return an array of "Error" objects
+
+        Set the proper RFC 6901 JSON pointer object by checking
+        the type of error. Global resource errors, field-level
+        errors, & relationship field errors will have different
+        error codes.
+
+        The existing pointer will already be set but not yet
+        fully qualified like it needs to be specifically for
+        JSON API.
+
+        :spec:
+            jsonapi.org/format/#errors
+        """
+
+        for error in data['errors']:
+            pointer = error['source']['pointer']
+
+            if error['code'] == 'RelationshipError':
+                error['source']['pointer'] = '/data/relationships%s' % pointer
+            elif error['code'] == 'FieldError':
+                error['source']['pointer'] = '/data/attributes%s' % pointer
+            elif error['code'] == 'ResourceError':
+                error['source']['pointer'] = '/data'
+        return data
+
     def _get_include(self, cache, context, models, ret):
         """ Given a cache dict & models serialize them
 
@@ -213,7 +240,9 @@ class JsonApiRenderer(JSONRenderer):
 
         if not data:
             data = self.get_top_level(data, request, pager)
-        elif 'errors' not in data:
+        elif 'errors' in data:
+            data = self.get_errors(data)
+        else:
             serializer = data.serializer
             if isinstance(data, list):
                 serializer = serializer.child

@@ -196,3 +196,35 @@ class UnsupportedMediaType(exceptions.APIException):
     link = 'https://tools.ietf.org/html/rfc7231#section-6.5.13'
     status_code = 415
     title = 'Content-type header missing or unsupported'
+
+
+"""
+    422 Unprocessable Entity
+    ~~~~~~~~~~~~~~~~~~~~~~~~
+"""
+
+
+class ValidationError(exceptions.APIException):
+    """ Custom 422 for handling validation errors """
+
+    link = 'https://tools.ietf.org/html/rfc4918#section-11.2'
+    status_code = 422
+    title = 'One or more validation errors'
+
+
+class FieldError(ValidationError):
+    """ Custom 422 for handling validation errors """
+
+    title = 'Field validation error'
+
+
+class RelationshipError(ValidationError):
+    """ Custom 422 for handling validation errors """
+
+    title = 'Relationship field validation error'
+
+
+class ResourceError(ValidationError):
+    """ Custom 422 for handling validation errors """
+
+    title = 'Resource level validation error'

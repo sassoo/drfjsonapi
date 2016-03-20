@@ -8,11 +8,18 @@
     JsonApiSerializer
 """
 
+from .exceptions import (
+    FieldError,
+    ManyExceptions,
+    RelationshipError,
+    ResourceError,
+)
 from .relations import ResourceRelatedField
 from .utils import _get_resource_url
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.functional import cached_property
 from django.utils.module_loading import import_string
+from rest_framework import exceptions
 from rest_framework import serializers
 from rest_framework.relations import ManyRelatedField
 
@@ -140,6 +147,41 @@ class JsonApiSerializer(serializers.Serializer):
                   'or override `get_rtype()`' % self.__class__.__name__
             raise ImproperlyConfigured(msg)
 
+    def process_validation_errors(self, exc):
+        """ This should be called by `to_internal_value`
+
+        Turn each DRF ValidationError error message in the
+        `detail` property into an individual drfjsonapi
+        ValidationError object. We want one error message
+        per object.
+
+        The JSON API spec has a `source` member that follows
+        the JSON Pointer guidelines of RFC 6901 which points
+        to a path in the payload representing the field
+        responsible for the error. It also has a `meta` member
+        that we set a custom boolean member named `relationship`
+        if the field is a relationship or not.
+
+        The renderer will then properly construct the source
+        path. We do this so the source is meaningful across
+        different renderers.
+        """
+
+        excs = []
+        if isinstance(exc.detail, list):
+            for error in exc.detail:
+                excs.append(ResourceError(error))
+        else:
+            for field, errors in exc.detail.items():
+                for error in errors:
+                    if field in self.related_field_names:
+                        _exc = RelationshipError(error)
+                    else:
+                        _exc = FieldError(error)
+                    _exc.source = {'pointer': '/%s' % field}
+                    excs.append(_exc)
+        raise ManyExceptions(excs)
+
     def sparse_filter(self, data):
         """ Trim fields based on the sparse fieldset request """
 
@@ -154,7 +196,7 @@ class JsonApiSerializer(serializers.Serializer):
                         del data[key]
 
     def to_internal_value(self, data):
-        """ DRF override for extra helper type stuff
+        """ DRF override for extra helper type stuff & error handling
 
         The meta `create_only_fields` list contains field names
         which can only be set during create & are not allowed to
@@ -165,7 +207,11 @@ class JsonApiSerializer(serializers.Serializer):
         for field in getattr(meta, 'create_only_fields', ()):
             if self.instance and field in data:
                 del data[field]
-        return super(JsonApiSerializer, self).to_internal_value(data)
+
+        try:
+            return super(JsonApiSerializer, self).to_internal_value(data)
+        except exceptions.ValidationError as exc:
+            self.process_validation_errors(exc)
 
     def to_representation(self, instance):
         """ DRF override for consistent representation
