@@ -213,18 +213,18 @@ class ValidationError(exceptions.APIException):
 
 
 class FieldError(ValidationError):
-    """ Custom 422 for handling validation errors """
+    """ Field level ValidationError """
 
     title = 'Field validation error'
 
 
 class RelationshipError(ValidationError):
-    """ Custom 422 for handling validation errors """
+    """ Field level ValidationError but for relationships """
 
     title = 'Relationship field validation error'
 
 
 class ResourceError(ValidationError):
-    """ Custom 422 for handling validation errors """
+    """ Global resource level ValidationError """
 
     title = 'Resource level validation error'
