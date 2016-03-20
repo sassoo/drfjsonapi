@@ -14,7 +14,18 @@ clients & follows all of the MUST's of the spec (or will soon where missing).
 
 Known incomplete JSON API spec features/guidelines are:
 
+-  Error object pointers
 -  "Relationship Links"
+
+Error object pointers isn't very great currently. It handles field-level,
+resource-level, & relationship "pointer" construction just fine but I
+don't think it will handle any sort of complex nested field errors. The
+pointer may not be accurate. I'll have to test & figure out a way to do
+that properly with DRF & it's native ValidationError field names.
+
+This matters when you look at RFC 6901. We may need something more robust
+here as an additional DRF plugin that drfjsonapi requires.
+
 
 Relationship links are the "self" member of the links object for relationships.
 Currently, ember doesn't support relationship modificiation for that endpoint
