@@ -17,7 +17,6 @@ from .exceptions import (
 from .relations import ResourceRelatedField
 from .utils import _get_resource_url
 from django.core.exceptions import ImproperlyConfigured
-from django.utils.functional import cached_property
 from django.utils.module_loading import import_string
 from rest_framework import exceptions
 from rest_framework import serializers
@@ -28,8 +27,8 @@ from rest_framework.relations import ManyRelatedField
 class JsonApiSerializer(serializers.Serializer):
     """ JSON API Serializer """
 
-    @cached_property
-    def related_field_names(self):
+    @property
+    def related_fields(self):
         """ Return a list of relationship field names """
 
         names = []
@@ -68,11 +67,31 @@ class JsonApiSerializer(serializers.Serializer):
 
         return {}
 
-    def get_filter_fields(self):
+    def get_default_includes(self):
+        """ Return a list of fields to include by default
+
+        The serializers `Meta.default_includes` property is
+        used to source the items.
+        """
+
+        # pylint: disable=no-member
+        return getattr(self.Meta, 'default_includes', [])
+
+    def get_default_sorts(self):
+        """ Return a list of fields to sort by default
+
+        The serializers `Meta.default_sorts` property is
+        used to source the items.
+        """
+
+        # pylint: disable=no-member
+        return getattr(self.Meta, 'default_sorts', [])
+
+    def get_fields_filterable(self):
         """ Return a dict of fields allowed to be filtered on
 
-        By default the `Meta.filter_fields` property is used to
-        source the items.
+        By default the `Meta.fields_filterable` property is
+        used to source the items.
 
         The key of each item is the string name of the field &
         the value is the `FilterField` object instance. Only
@@ -81,32 +100,34 @@ class JsonApiSerializer(serializers.Serializer):
 
         readable = self.get_readable_fields()
         # pylint: disable=no-member
-        filter_fields = getattr(self.Meta, 'filter_fields', {})
-        return {k: v for k, v in filter_fields.items() if k in readable}
+        fields = getattr(self.Meta, 'fields_filterable', {})
+        return {k: v for k, v in fields.items() if k in readable}
 
-    def get_inclusion_field_names(self):
-        """ Return a list of inclusionable field names
+    def get_fields_includable(self):
+        """ Return a list of includable field names
 
-        The serializers `Meta.inclusion_fields` object contains the
-        list of inclusionable fields.
-
-        Just in case some bonehead removes the field from the
-        serializer or sets it write_only & forgets to remove it
-        from the `Meta.inclusion_fields` property this will
-        automatically prune them.
-
-        NOTE: if no inclusion_fields meta property is set
-              then all readable related fields are eligable
-              for inclusion
-
-        :returns:
-            list of string field names
+        The serializers `Meta.fields_includable` property is
+        used to source the items. If no fields_includable meta
+        property is set then all readable related fields are
+        eligable for inclusion.
         """
 
         readable = self.get_readable_fields()
-        meta = getattr(self, 'Meta')
-        names = getattr(meta, 'inclusion_fields', self.related_field_names)
-        return [name for name in names if name in readable]
+        # pylint: disable=no-member
+        fields = getattr(self.Meta, 'fields_includable', self.related_fields)
+        return [field for field in fields if field in readable]
+
+    def get_fields_sortable(self):
+        """ Return a list of sortable field names
+
+        The serializers `Meta.fields_sortable` property is
+        used to source the items.
+        """
+
+        readable = self.get_readable_fields()
+        # pylint: disable=no-member
+        fields = getattr(self.Meta, 'fields_sortable', [])
+        return [field for field in fields if field in readable]
 
     def get_readable_fields(self):
         """ Return `fields` but pruned to only readable fields
@@ -117,21 +138,12 @@ class JsonApiSerializer(serializers.Serializer):
 
         return {f.field_name: f for f in self._readable_fields}
 
-    def get_related_queryset(self, field_name):
-        """ Return a queryset instance for the related field """
-
-        try:
-            meta = getattr(self, 'Meta')
-            return meta.related_querysets[field_name]
-        except (AttributeError, KeyError):
-            return None
-
     def get_related_serializer(self, field_name, **kwargs):
         """ Return a serializer instance for the related field """
 
         try:
-            meta = getattr(self, 'Meta')
-            serializer = meta.related_serializers[field_name]
+            # pylint: disable=no-member
+            serializer = self.Meta.related_serializers[field_name]
             serializer = import_string(serializer)
             return serializer(context=self.context, **kwargs)
         except (AttributeError, KeyError, ImportError):
@@ -158,9 +170,7 @@ class JsonApiSerializer(serializers.Serializer):
         The JSON API spec has a `source` member that follows
         the JSON Pointer guidelines of RFC 6901 which points
         to a path in the payload representing the field
-        responsible for the error. It also has a `meta` member
-        that we set a custom boolean member named `relationship`
-        if the field is a relationship or not.
+        responsible for the error.
 
         The renderer will then properly construct the source
         path. We do this so the source is meaningful across
@@ -174,7 +184,7 @@ class JsonApiSerializer(serializers.Serializer):
         else:
             for field, errors in exc.detail.items():
                 for error in errors:
-                    if field in self.related_field_names:
+                    if field in self.related_fields:
                         _exc = RelationshipError(error)
                     else:
                         _exc = FieldError(error)
@@ -183,30 +193,23 @@ class JsonApiSerializer(serializers.Serializer):
         raise ManyExceptions(excs)
 
     def sparse_filter(self, data):
-        """ Trim fields based on the sparse fieldset request """
+        """ Trim fields based on the sparse fieldset request
+
+        The JSON API spec uses the resource type (rtype) to
+        qualify which fields should be returned. The `id` &
+        `type` fields are always required.
+        """
 
         sparse_cache = getattr(self.context['request'], '_sparse_cache', {})
         for rtype, fields in sparse_cache.items():
-            # always required
-            fields += ['id', 'type']
-
+            fields = fields + ['id', 'type']
             if rtype == self.get_rtype():
                 for key in data.keys():
                     if key not in fields:
                         del data[key]
 
     def to_internal_value(self, data):
-        """ DRF override for extra helper type stuff & error handling
-
-        The meta `create_only_fields` list contains field names
-        which can only be set during create & are not allowed to
-        be mutated after.
-        """
-
-        meta = getattr(self, 'Meta')
-        for field in getattr(meta, 'create_only_fields', ()):
-            if self.instance and field in data:
-                del data[field]
+        """ DRF override for error handling """
 
         try:
             return super(JsonApiSerializer, self).to_internal_value(data)
@@ -226,13 +229,15 @@ class JsonApiSerializer(serializers.Serializer):
 
         In this implementation a few additional keywords are
         reserved per JSON API like: `meta`, `links`, & `type`.
-
         Any instances used cannot have fields with those names.
         """
 
+        self.pre_to_representation(instance)
+        1. trim all but sparse fields if present
+        2. trim all related not included & not related_linkage
+
         data = super(JsonApiSerializer, self).to_representation(instance)
 
-        self.sparse_filter(data)
         data['links'] = self.get_data_links(instance)
         data['meta'] = self.get_data_meta()
         data['type'] = self.get_rtype()

@@ -290,6 +290,12 @@ class InclusionFilter(BaseFilterBackend):
         """ The superclass doesn't have an __init__ defined """
 
         self._cache = OrderedDict()
+        # XXX this should look for related fields with
+        # default inclusions if none specified & auto
+        # include them
+        # This is good for performance & avoids the
+        # security issue of default filters on related fields
+        print 'XXX READ INCLUSION FILTER COMMENT'
 
     def filter_queryset(self, request, queryset, view):
         """ DRF entry point into the custom FilterBackend """
@@ -321,7 +327,6 @@ class InclusionFilter(BaseFilterBackend):
 
             _dict = _reduce_str_to_dict(key, val)
             _dict_merge(cache, _dict)
-
         return cache
 
     def get_prefetches(self):
@@ -466,7 +471,7 @@ class OrderingFilter(_OrderingFilter):
                 excs.append(InvalidSortParam(msg))
             else:
                 msg = 'The "%s" sort query parameter either does not ' \
-                      'exist or you are not allowed to sort upon it' % sort
+                      'exist or you are not allowed to sort on it' % sort
                 excs.append(InvalidSortParam(msg))
 
         if excs and self.strict_mode:

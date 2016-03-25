@@ -66,6 +66,7 @@ class JsonApiRenderer(JSONRenderer):
             if key not in data:
                 continue
             try:
+                print 'XXX first get links then try data first get links then try data data might be absent unless includes'
                 relationships[key] = {
                     'links': field.get_links(data['id']),
                     'meta': field.get_meta(),

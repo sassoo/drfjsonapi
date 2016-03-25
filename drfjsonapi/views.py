@@ -111,16 +111,16 @@ class JsonApiViewMixin(object):
         )
 
         for param in request.query_params.keys():
-            if param.startswith('field') and SparseFilter not in filters:
+            if param.startswith('fields[') and SparseFilter not in filters:
                 msg = '"field" query parameters are not supported'
                 raise InvalidFieldParam(msg)
-            elif param.startswith('filter') and FieldFilter not in filters:
+            elif param.startswith('filter[') and FieldFilter not in filters:
                 msg = '"filter" query parameters are not supported'
                 raise InvalidFilterParam(msg)
             elif param == 'include' and InclusionFilter not in filters:
                 msg = '"include" query parameters are not supported'
                 raise InvalidIncludeParam(msg)
-            elif param.startswith('page'):
+            elif param.startswith('page['):
                 if not isinstance(self.pagination_class, JsonApiPagination):
                     msg = '"page" query parameters are not supported'
                     raise InvalidPageParam(msg)
@@ -162,5 +162,6 @@ class JsonApiViewMixin(object):
 
         name = '%s-list' % base_name
         view = self._get_related_view(name, 'list')
+        print 'XXX security leak without filter'
         view.queryset = getattr(self.get_object(), field).all()
         return view.list(self.request)
