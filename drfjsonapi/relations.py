@@ -14,14 +14,30 @@ from rest_framework.relations import (
 )
 
 
+def _get_attribute(inst, func):
+    """ XXX """
+    def wrapper(*args, **kwargs):
+        """ XXX """
+        queryset = func(*args, **kwargs)
+        if hasattr(queryset, 'all') and inst.filter_backends:
+            for backend in inst.filter_backends:
+                queryset = backend().filter_queryset(
+                    inst.context['request'],
+                    queryset,
+                    inst.context['view'],
+                )
+        return queryset
+    return wrapper
+
+
 def _get_field_name(field):
     """ Return the fields name """
 
     return field.field_name or field.parent.field_name
 
 
-def _get_field_serializer(field):
-    """ Return the fields serializer """
+def _get_parent_serializer(field):
+    """ Return the fields parent serializer """
 
     if isinstance(field.parent, ManyRelatedField):
         return field.parent.parent
@@ -42,14 +58,36 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
         'rtype_conflict': _('Incorrect resource type of "{given}". Only '
                             '"{rtype}" resource types are accepted'),
     }
+    filter_backends = ()
+    includable = False
+    include = False
+    linkage = False
+    related_view = None
+    rtype = None
+    serializer = None
 
-    def __init__(self, related_view_name=None, rtype=None, **kwargs):
+    def __new__(cls, *args, **kwargs):
+        """ XXX override because of DRF ManyRelatedField
 
-        super(ResourceRelatedField, self).__init__(**kwargs)
+        * serializer needed if includable
+        * includable needed if include
+        """
 
-        self.related_view_name = related_view_name
-        self.rtype = rtype
-        assert rtype is not None, 'The `rtype` argument is required.'
+        inst = super(ResourceRelatedField, cls).__new__(cls, *args, **kwargs)
+
+        inst.filter_backends = kwargs.pop('filter_backends', ())
+        inst.includable = kwargs.pop('includable', cls.includable)
+        inst.include = kwargs.pop('include', cls.include)
+        inst.linkage = kwargs.pop('linkage', cls.linkage)
+        inst.related_view = kwargs.pop('related_view', cls.related_view)
+        inst.rtype = kwargs.pop('rtype', cls.rtype)
+        inst.serializer = kwargs.pop('serializer', cls.serializer)
+
+        if not isinstance(inst, ResourceRelatedField):
+            inst.child_relation.default_linkage = inst.rtype
+            inst.child_relation.rtype = inst.rtype
+            inst.get_attribute = _get_attribute(inst, inst.get_attribute)
+        return inst
 
     def get_data(self, rid):
         """ Return the relationships "Resource Linkage" object
@@ -124,13 +162,13 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
         """
 
         kwargs = {'pk': parent_rid}
-        view_name = self.get_links_related_view_name()
-        return _get_url(view_name, self.parent.context, kwargs=kwargs)
+        view = self.get_links_related_view()
+        return _get_url(view, self.parent.context, kwargs=kwargs)
 
-    def get_links_related_view_name(self):
+    def get_links_related_view(self):
         """ Return the DRF view name for the "Related Resource Link"
 
-        If not provided vai the `related_view_name` property then
+        If not provided via the `related_view` property then
         attempt to auto-determine it. The default view name is:
 
             <serializer rtype>-<field name>
@@ -139,16 +177,23 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
         would have a default view name of: `actors-movies`
         """
 
-        view_name = self.related_view_name
-        if not view_name:
-            view_name = '{rtype}-{field_name}'.format(
+        view = self.related_view
+        if not view:
+            view = '{rtype}-{field_name}'.format(
                 field_name=_get_field_name(self),
-                rtype=_get_field_serializer(self).get_rtype(),
+                rtype=_get_parent_serializer(self).get_rtype(),
             )
-        return view_name
+        return view
 
     def get_meta(self):
-        """ Return the relationships "Meta" object """
+        """ Return the relationships "Meta" object
+
+        This is the relationships top-level meta object & by
+        default nothing except an empty object is returned.
+
+        :spec:
+            jsonapi.org/format/#document-resource-object-relationships
+        """
 
         return {}
 
@@ -179,6 +224,9 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
 
     def to_representation(self, value):
         """ Override DRF PrimaryKeyRelatedField `to_representation` """
+
+        # if include return it
+        # if linkage return it
 
         rid = super(ResourceRelatedField, self).to_representation(value)
         return self.get_data(rid)

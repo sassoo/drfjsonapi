@@ -68,14 +68,14 @@ class JsonApiSerializer(serializers.Serializer):
         return {}
 
     def get_default_includes(self):
-        """ Return a list of fields to include by default
+        """ Return a list of related fields to include by default
 
         The serializers `Meta.default_includes` property is
         used to source the items.
         """
 
         # pylint: disable=no-member
-        return getattr(self.Meta, 'default_includes', [])
+        return [f for f in self.related_fields if f.include]
 
     def get_default_sorts(self):
         """ Return a list of fields to sort by default
@@ -196,13 +196,15 @@ class JsonApiSerializer(serializers.Serializer):
         """ Trim fields based on the sparse fieldset request
 
         The JSON API spec uses the resource type (rtype) to
-        qualify which fields should be returned. The `id` &
-        `type` fields are always required.
+        qualify which fields should be returned.
         """
 
-        sparse_cache = getattr(self.context['request'], '_sparse_cache', {})
-        for rtype, fields in sparse_cache.items():
-            fields = fields + ['id', 'type']
+        try:
+            sparse = self.context['request']._sparse_cache
+        except (AttributeError, KeyError):
+            sparse = {}
+
+        for rtype, fields in sparse.items():
             if rtype == self.get_rtype():
                 for key in data.keys():
                     if key not in fields:
@@ -232,9 +234,9 @@ class JsonApiSerializer(serializers.Serializer):
         Any instances used cannot have fields with those names.
         """
 
-        self.pre_to_representation(instance)
-        1. trim all but sparse fields if present
-        2. trim all related not included & not related_linkage
+        print '1. trim all but sparse fields if present'
+        print '2. trim all related not included & not related_linkage'
+        print '3. pass include into the context'
 
         data = super(JsonApiSerializer, self).to_representation(instance)
 

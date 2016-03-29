@@ -27,7 +27,7 @@ from rest_framework.filters import (
 )
 
 
-__all__ = ('FieldFilter', 'InclusionFilter', 'OrderingFilter', 'SparseFilter')
+__all__ = ('FieldFilter', 'IncludeFilter', 'OrderingFilter', 'SparseFilter')
 
 
 class FieldFilter(BaseFilterBackend):
@@ -47,7 +47,7 @@ class FieldFilter(BaseFilterBackend):
     MUST meet all of the following criteria:
 
         1. Not exceed the `max_relations` limit of nested
-           inclusions. For example, '?filter[foo__bar__baz]=hi'
+           includes. For example, '?filter[foo__bar__baz]=hi'
            would be 3 relations.
 
         2. Exist in the keys() list of the `get_filter_fields`
@@ -209,8 +209,8 @@ class FieldFilter(BaseFilterBackend):
                 self.generate_filter(related_path, lookup, value)
 
 
-class InclusionFilter(BaseFilterBackend):
-    """ Support the inclusion of compound documents
+class IncludeFilter(BaseFilterBackend):
+    """ Support the include of compound documents
 
     JSON API details
     ~~~~~~~~~~~~~~~~
@@ -229,7 +229,7 @@ class InclusionFilter(BaseFilterBackend):
            list of relationship names.
 
         3. If a server is unable to identify a relationship path
-           or does not support inclusion of resources from a path,
+           or does not support include of resources from a path,
            it MUST respond with 400 Bad Request.
 
     In addition to the above guidelines, this filter will handle
@@ -238,7 +238,7 @@ class InclusionFilter(BaseFilterBackend):
     uniquify them into a single tuple for validation checking.
 
     In the case of guideline #3, a ManyException will be raised
-    containing an InvalidIncludeParam exception for each inclusion
+    containing an InvalidIncludeParam exception for each include
     that fails validation checks. This allows the requestor to
     identify all of the errors in one round-turn.
 
@@ -251,37 +251,37 @@ class InclusionFilter(BaseFilterBackend):
     serializer for the primary data.
 
     That serializer will be used to validate the `include` query
-    param values. If the global `max_inclusions` property limit is
-    not exceeded then each inclusion is tested for eligibility.
+    param values. If the global `max_includes` property limit is
+    not exceeded then each include is tested for eligibility.
 
-    For an inclusion to be eligible it MUST meet all of the
+    For an include to be eligible it MUST meet all of the
     following criteria:
 
         1. Not exceed the `max_relations` limit of nested
-           inclusions. For example, '?include=foo.bar.baz'
+           includes. For example, '?include=foo.bar.baz'
            would be 3 relations.
 
-        2. Exist in the list of the `get_inclusion_field_names`
+        2. Exist in the list of the `get_include_field_names`
            method of the serializer
 
         3. Return a serializer for the field from a call to the
            serializers `get_related_serializer` method.
 
     The last step is needed to confirm a proper configuration
-    since any inclusioned fields require there own serializer.
+    since any includeed fields require there own serializer.
 
-    Each individual relation in an inclusion will be validated
+    Each individual relation in an include will be validated
     according to steps 2-3. An include of 'actor.movies' for
     instance would have both 'actor' & 'movies' vetted against
     steps 2-3 by walking the chain of related serializers.
 
-    All vetted inclusions will then have prefetching logic attached
+    All vetted includes will then have prefetching logic attached
     to the primary datasets queryset for efficiency. You can also
     define a default queryset for each Prefetch object by returning
     one from the serializers `get_related_queryset` method.
     """
 
-    max_inclusions = 8
+    max_includes = 8
     max_relations = 3
     relation_sep = '.'
     strict_mode = True
@@ -291,10 +291,13 @@ class InclusionFilter(BaseFilterBackend):
 
         self._cache = OrderedDict()
         # XXX this should look for related fields with
-        # default inclusions if none specified & auto
+        # default includes if none specified & auto
         # include them
+        #
         # This is good for performance & avoids the
         # security issue of default filters on related fields
+        #
+        # Use the filter_backends on the related field
         print 'XXX READ INCLUSION FILTER COMMENT'
 
     def filter_queryset(self, request, queryset, view):
@@ -309,12 +312,12 @@ class InclusionFilter(BaseFilterBackend):
                   'from "get_serializer()"'
             raise ImproperlyConfigured(msg % self.__class__.__name__)
 
-        inclusions = self.get_inclusion_params(request)
-        if inclusions:
-            self.validate_inclusions(inclusions, serializer)
+        includes = self.get_include_params(request)
+        if includes:
+            self.validate_includes(includes, serializer)
             prefetches = self.get_prefetches()
             queryset = queryset.prefetch_related(*prefetches)
-        request._inclusion_cache = self._get_cache()
+        request._include_cache = self._get_cache()
         return queryset
 
     def _get_cache(self):
@@ -341,55 +344,55 @@ class InclusionFilter(BaseFilterBackend):
             prefetches.append(Prefetch(field, queryset=value['queryset']))
         return prefetches
 
-    def get_inclusion_params(self, request):
+    def get_include_params(self, request):
         """ Return the sanitized `include` query parameters
 
         Handles comma separated & multiple include params & return
         a tuple of duplicate free strings
         """
 
-        inclusions = request.query_params.getlist('include')
-        inclusions = [inclusion.split(',') for inclusion in inclusions]
-        inclusions = list(itertools.chain(*inclusions))
-        return tuple(set(inclusions))
+        includes = request.query_params.getlist('include')
+        includes = [include.split(',') for include in includes]
+        includes = list(itertools.chain(*includes))
+        return tuple(set(includes))
 
-    def validate_inclusions(self, inclusions, serializer):
-        """ Validate all the sanitized inclusioned query parameters """
+    def validate_includes(self, includes, serializer):
+        """ Validate all the sanitized includeed query parameters """
 
-        if len(inclusions) > self.max_inclusions:
+        if len(includes) > self.max_includes:
             msg = 'The include query parameter requested "%s" additional ' \
                   'compound documents exceeding the max number of "%s"' \
-                  % (len(inclusions), self.max_inclusions)
+                  % (len(includes), self.max_includes)
             raise InvalidIncludeParam(msg)
 
         excs = []
-        for inclusion in inclusions:
+        for include in includes:
             try:
-                self.validate_inclusion(inclusion, serializer)
+                self.validate_include(include, serializer)
             except InvalidIncludeParam as exc:
                 exc.detail = 'The "%s" include query parameter failed to ' \
                              'validate with the following error(s): %s' \
-                             % (inclusion, exc.detail)
+                             % (include, exc.detail)
                 excs.append(exc)
 
         if self.strict_mode and excs:
             raise ManyExceptions(excs)
 
-    def validate_inclusion(self, inclusion, serializer):
-        """ Validate each inclusioned query param individually
+    def validate_include(self, include, serializer):
+        """ Validate each includeed query param individually
 
-        Walk the serializers for deeply nested inclusion requests
-        to ensure they are allowed to be inclusioned.
+        Walk the serializers for deeply nested include requests
+        to ensure they are allowed to be includeed.
         """
 
-        relations = inclusion.split(self.relation_sep)
+        relations = include.split(self.relation_sep)
         if len(relations) > self.max_relations:
             msg = 'Max relations limit of "%s" exceeded' % self.max_relations
             raise InvalidIncludeParam(msg)
 
         for idx, relation in enumerate(relations):
             related_serializer = serializer.get_related_serializer(relation)
-            includable = serializer.get_inclusion_field_names()
+            includable = serializer.get_include_field_names()
 
             if not related_serializer or relation not in includable:
                 raise InvalidIncludeParam('Missing or not allowed to include')
@@ -511,7 +514,7 @@ class SparseFilter(BaseFilterBackend):
 
         A dict will be generated for each match containing the
         resource type in the fields query param as the key with
-        a list value of fields to limit to.
+        a tuple value of fields to limit to.
 
         An example fields of `fields[actors]=name,movies` would
         return a dict of:
@@ -520,17 +523,14 @@ class SparseFilter(BaseFilterBackend):
 
         NOTE: the `id` & `type` members are always returned
               no matter the fields query param.
-
-        :return:
-            dict
         """
 
         sparse_fields = {}
         regex = re.compile(r'^fields\[([A-Za-z0-9_]+)\]$')
 
-        for param, value in request.query_params.items():
+        for param, val in request.query_params.items():
             match = regex.match(param)
             if match:
-                values = value.split(',')
-                sparse_fields[match.groups()[0]] = values
+                vals = tuple(set(val.split(',') + ['id', 'type']))
+                sparse_fields[match.groups()[0]] = vals
         return sparse_fields

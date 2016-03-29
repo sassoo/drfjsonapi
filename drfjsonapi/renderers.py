@@ -59,12 +59,11 @@ class JsonApiRenderer(JSONRenderer):
         """
 
         relationships = {}
-        for key, field in serializer.fields.items():
+        for field in serializer.related_fields:
+            # sparse fields
+            field = serializer.fields.get(field, None)
             if isinstance(field, ManyRelatedField):
                 field = field.child_relation
-            # sparse fields
-            if key not in data:
-                continue
             try:
                 print 'XXX first get links then try data first get links then try data data might be absent unless includes'
                 relationships[key] = {
@@ -107,9 +106,9 @@ class JsonApiRenderer(JSONRenderer):
         """ Given a cache dict & models serialize them
 
         This is self-referential walking the cache tree that
-        was created by the `InclusionFilter`. It ensure no
-        dupes exist within the compound documents array but
-        doesn't do anything with the primary data.
+        was created by the `IncludeFilter`. It ensure no dupes
+        exist within the compound documents array but doesn't
+        do anything with the primary data.
 
         It does not return anything & instead has mutation
         side-effects of the inclusion array `ret`.
@@ -148,11 +147,11 @@ class JsonApiRenderer(JSONRenderer):
         there should be no duplicates within the included array
         itself or the primary data.
 
-        The drfjsonapi `InclusionFilter` adds a private property
+        The drfjsonapi `IncludeFilter` adds a private property
         to the request object named `_inclusion_cache` which
         greatly reduces the complexity of this process.
 
-        TIP: read the documentation of the `InclusionFilter`
+        TIP: read the documentation of the `IncludeFilter`
              class for more information.
 
         :spec:

@@ -117,7 +117,7 @@ class JsonApiViewMixin(object):
             elif param.startswith('filter[') and FieldFilter not in filters:
                 msg = '"filter" query parameters are not supported'
                 raise InvalidFilterParam(msg)
-            elif param == 'include' and InclusionFilter not in filters:
+            elif param == 'include' and IncludeFilter not in filters:
                 msg = '"include" query parameters are not supported'
                 raise InvalidIncludeParam(msg)
             elif param.startswith('page['):
