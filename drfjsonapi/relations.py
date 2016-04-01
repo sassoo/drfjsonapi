@@ -14,20 +14,8 @@ from rest_framework.relations import (
 )
 
 
-def _get_attribute(inst, func):
-    """ XXX """
-    def wrapper(*args, **kwargs):
-        """ XXX """
-        queryset = func(*args, **kwargs)
-        if hasattr(queryset, 'all') and inst.filter_backends:
-            for backend in inst.filter_backends:
-                queryset = backend().filter_queryset(
-                    inst.context['request'],
-                    queryset,
-                    inst.context['view'],
-                )
-        return queryset
-    return wrapper
+CUSTOM_ATTRS = ('includable', 'include', 'linkage', 'related_view',
+                'rtype', 'serializer')
 
 
 def _get_field_name(field):
@@ -58,36 +46,29 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
         'rtype_conflict': _('Incorrect resource type of "{given}". Only '
                             '"{rtype}" resource types are accepted'),
     }
+
     filter_backends = ()
-    includable = False
+    includable = True
     include = False
     linkage = False
     related_view = None
     rtype = None
     serializer = None
 
-    def __new__(cls, *args, **kwargs):
-        """ XXX override because of DRF ManyRelatedField
+    def __init__(self, *args, **kwargs):
 
-        * serializer needed if includable
-        * includable needed if include
-        """
+        # pop first since DRF would choke
+        # if not read_only=False
+        queryset = kwargs.pop('queryset')
+        # pop everything else since DRF
+        # would choke on unknown kwargs
+        self.filter_backends = kwargs.pop('filter_backends', ())
+        for attr in CUSTOM_ATTRS:
+            val = kwargs.pop(attr, getattr(self, attr))
+            setattr(self, attr, val)
 
-        inst = super(ResourceRelatedField, cls).__new__(cls, *args, **kwargs)
-
-        inst.filter_backends = kwargs.pop('filter_backends', ())
-        inst.includable = kwargs.pop('includable', cls.includable)
-        inst.include = kwargs.pop('include', cls.include)
-        inst.linkage = kwargs.pop('linkage', cls.linkage)
-        inst.related_view = kwargs.pop('related_view', cls.related_view)
-        inst.rtype = kwargs.pop('rtype', cls.rtype)
-        inst.serializer = kwargs.pop('serializer', cls.serializer)
-
-        if not isinstance(inst, ResourceRelatedField):
-            inst.child_relation.default_linkage = inst.rtype
-            inst.child_relation.rtype = inst.rtype
-            inst.get_attribute = _get_attribute(inst, inst.get_attribute)
-        return inst
+        super(ResourceRelatedField, self).__init__(*args, **kwargs)
+        self.queryset = queryset
 
     def get_data(self, rid):
         """ Return the relationships "Resource Linkage" object
@@ -127,6 +108,19 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
 
         url = _get_resource_url(self.rtype, rid, self.context)
         return {'self': url}
+
+    def get_filtered_queryset(self):
+        """ XXX """
+
+        queryset = super(ResourceRelatedField, self).get_queryset()
+        if not self.context:
+            return queryset
+
+        for backend in self.filter_backends:
+            queryset = backend().filter_queryset(
+                self.context['request'], queryset, self.context['view']
+            )
+        return queryset
 
     def get_links(self, parent_rid):
         """ Return the relationships "Links" object
@@ -224,9 +218,6 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
 
     def to_representation(self, value):
         """ Override DRF PrimaryKeyRelatedField `to_representation` """
-
-        # if include return it
-        # if linkage return it
 
         rid = super(ResourceRelatedField, self).to_representation(value)
         return self.get_data(rid)

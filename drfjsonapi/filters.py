@@ -290,15 +290,6 @@ class IncludeFilter(BaseFilterBackend):
         """ The superclass doesn't have an __init__ defined """
 
         self._cache = OrderedDict()
-        # XXX this should look for related fields with
-        # default includes if none specified & auto
-        # include them
-        #
-        # This is good for performance & avoids the
-        # security issue of default filters on related fields
-        #
-        # Use the filter_backends on the related field
-        print 'XXX READ INCLUSION FILTER COMMENT'
 
     def filter_queryset(self, request, queryset, view):
         """ DRF entry point into the custom FilterBackend """
@@ -312,11 +303,18 @@ class IncludeFilter(BaseFilterBackend):
                   'from "get_serializer()"'
             raise ImproperlyConfigured(msg % self.__class__.__name__)
 
-        includes = self.get_include_params(request)
+        includes = self.get_query_includes(request)
         if includes:
             self.validate_includes(includes, serializer)
-            prefetches = self.get_prefetches()
-            queryset = queryset.prefetch_related(*prefetches)
+        else:
+            self.process_default_includes(serializer)
+
+
+
+        prefetches = self.get_prefetches()
+        queryset = queryset.prefetch_related(*prefetches)
+
+
         request._include_cache = self._get_cache()
         return queryset
 
@@ -332,6 +330,18 @@ class IncludeFilter(BaseFilterBackend):
             _dict_merge(cache, _dict)
         return cache
 
+
+
+    def _update_cache(self, path, field, serializer):
+
+        self._cache[path] = {
+            'field': field,
+            'queryset': serializer.get_related_queryset(field),
+            'serializer': serializer,
+        }
+
+
+
     def get_prefetches(self):
         """ Return the list of generated Prefetch objects
 
@@ -344,7 +354,7 @@ class IncludeFilter(BaseFilterBackend):
             prefetches.append(Prefetch(field, queryset=value['queryset']))
         return prefetches
 
-    def get_include_params(self, request):
+    def get_query_includes(self, request):
         """ Return the sanitized `include` query parameters
 
         Handles comma separated & multiple include params & return
@@ -355,6 +365,32 @@ class IncludeFilter(BaseFilterBackend):
         includes = [include.split(',') for include in includes]
         includes = list(itertools.chain(*includes))
         return tuple(set(includes))
+
+
+
+    def process_default_includes(self, serializer):
+        """ XXX """
+
+        # XXX this should look for related fields with
+        # default includes if none specified & auto
+        # include them
+        #
+        # If linkage=True and not RelatedField then
+        # prefetch as well. No need on RelatedField
+        # since it's optimized.
+        #
+        # If linkage=False and not included and not
+        # RelatedField then prefetch to none. This
+        # avoids an uneeded database hit. But how?
+        # A queryset will always be needed.
+        #
+        # Use the `prefetch` kwarg on the related field
+        # & if it's a callable run it with context
+        # otherwise if it's a Prefetch instance use it.
+        #
+        # Call get_related_prefetch on the RelatedField
+        # to get the filtered queryset if available
+
 
     def validate_includes(self, includes, serializer):
         """ Validate all the sanitized includeed query parameters """
@@ -391,19 +427,15 @@ class IncludeFilter(BaseFilterBackend):
             raise InvalidIncludeParam(msg)
 
         for idx, relation in enumerate(relations):
-            related_serializer = serializer.get_related_serializer(relation)
-            includable = serializer.get_include_field_names()
+            _serializer = serializer.get_related_serializer(relation)
+            includable = serializer.get_related_includable()
 
-            if not related_serializer or relation not in includable:
+            if not _serializer or relation not in includable:
                 raise InvalidIncludeParam('Missing or not allowed to include')
 
             related_path = '__'.join(relations[:idx + 1])
-            self._cache[related_path] = {
-                'field': relation,
-                'queryset': serializer.get_related_queryset(relation),
-                'serializer': related_serializer,
-            }
-            serializer = related_serializer
+            self._update_cache(related_path, relation, _serializer)
+            serializer = _serializer
 
 
 class OrderingFilter(_OrderingFilter):
