@@ -18,58 +18,6 @@ class JsonApiRenderer(JSONRenderer):
 
     media_type = 'application/vnd.api+json'
 
-    def get_data(self, data, serializer):
-        """ Return an individual "Resource Object" object
-
-        This should return a dict that is compliant with the
-        "Resource Object" section of the JSON API spec. It
-        will later be wrapped by the "Top Level" members.
-
-        :spec:
-            jsonapi.org/format/#document-resource-objects
-        """
-
-        resource = {
-            'meta': data.pop('meta'),
-            'links': data.pop('links'),
-            'type': data.pop('type'),
-        }
-
-        if data:
-            resource['attributes'] = data
-        relationships = self.get_data_relationships(data, serializer)
-        if relationships:
-            resource['relationships'] = relationships
-        # wait to pop until the end
-        resource['id'] = str(data.pop('id'))
-
-        return resource
-
-    def get_data_relationships(self, data, serializer):
-        """ Return a resource objects "Relationships" object
-
-        This should return a dict that is compliant with the
-        "Relationships Object" section of the JSON API spec.
-        Specifically, the contents of the top level `relationships`
-        member of an individual resource boject.
-
-        :spec:
-            jsonapi.org/format/#document-resource-object-relationships
-        """
-
-        relationships = {}
-        for key, field in serializer.related_fields.items():
-            # sparse fields
-            if key not in data:
-                continue
-
-            relationships[key] = {
-                'links': field.get_links(data['id']),
-                'meta': field.get_meta(),
-                'data': data.pop(key),
-            }
-        return relationships
-
     def get_errors(self, data):
         """ Return an array of "Error" objects
 
@@ -124,8 +72,7 @@ class JsonApiRenderer(JSONRenderer):
                 # XXX document it in case fields are altered
                 # depending on the instance!
                 context['include'] = cache.keys()
-                _serializer = field.get_serializer(_model, context=context)
-                data = self.get_data(_serializer.data, _serializer)
+                data = field.get_serializer(_model, context=context).data
 
                 # no dupes
                 if data not in ret:
@@ -244,9 +191,6 @@ class JsonApiRenderer(JSONRenderer):
             serializer = data.serializer
             if isinstance(data, list):
                 serializer = serializer.child
-                data = [self.get_data(d, serializer) for d in data]
-            else:
-                data = self.get_data(data, serializer)
             data = self.get_top_level(data, request, pager, serializer)
 
         return super(JsonApiRenderer, self).render(

@@ -176,30 +176,27 @@ class JsonApiSerializer(serializers.Serializer):
                 del self.fields[key]
 
     def to_representation(self, instance):
-        """ DRF override for consistent representation
+        """ Return an individual "Resource Object" object
 
-        This should do only enough to support a common representation
-        across different renderers & more importantly parsers. The
-        format should be easily consumed back via a parser without
-        all parsers having to be JSON API aware.
+        This should return a dict that is compliant with the
+        "Resource Object" section of the JSON API spec. It
+        will later be wrapped by the "Top Level" members.
 
-        Basically, include only what you'd like to have across
-        ALL renderers & parsers.
-
-        In this implementation a few additional keywords are
-        reserved per JSON API like: `meta`, `links`, & `type`.
-        Any instances used cannot have fields with those names.
+        :spec:
+            jsonapi.org/format/#document-resource-objects
         """
 
         self.to_representation_sparse()
 
         data = super(JsonApiSerializer, self).to_representation(instance)
-        data['links'] = self.get_data_links(instance)
-        data['meta'] = self.get_data_meta()
-        data['relationships'] = self.get_relationships(data)
-        data['type'] = self.get_rtype()
-
-        return data
+        return {
+            'attributes': data,
+            'links': self.get_data_links(instance),
+            'meta': self.get_data_meta(),
+            'relationships': self.get_relationships(data),
+            'type': self.get_rtype(),
+            'id': data.pop('id'),
+        }
 
 
 class JsonApiModelSerializer(JsonApiSerializer, serializers.ModelSerializer):
