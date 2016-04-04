@@ -17,8 +17,6 @@ from .exceptions import (
 from .relations import ResourceRelatedField
 from .utils import _get_resource_url
 from django.core.exceptions import ImproperlyConfigured
-from django.utils.functional import cached_property
-from django.utils.module_loading import import_string
 from rest_framework import exceptions
 from rest_framework import serializers
 from rest_framework.relations import ManyRelatedField
@@ -28,7 +26,7 @@ from rest_framework.relations import ManyRelatedField
 class JsonApiSerializer(serializers.Serializer):
     """ JSON API Serializer """
 
-    @cached_property
+    @property
     def related_fields(self):
         """ Return a dict of relationship fields """
 
@@ -41,24 +39,6 @@ class JsonApiSerializer(serializers.Serializer):
             elif isinstance(field, ResourceRelatedField):
                 fields[name] = field
         return fields
-
-    @cached_property
-    def related_includable(self):
-        """ Cached property of `get_related_includable` """
-
-        return self.get_related_includable()
-
-    @cached_property
-    def related_include(self):
-        """ Cached property of `get_related_include` """
-
-        return self.get_related_include()
-
-    @cached_property
-    def related_linkage(self):
-        """ Cached property of `get_related_linkage` """
-
-        return self.get_related_linkage()
 
     def get_data_links(self, instance):
         """ Return the "Links" object for an individual resource
@@ -113,21 +93,6 @@ class JsonApiSerializer(serializers.Serializer):
 
         return {k: v for k, v in self.related_fields.items() if v.include}
 
-    def get_related_linkage(self):
-        """ Return a dict of readable fields with data linkages """
-
-        return {k: v for k, v in self.related_fields.items() if v.linkage}
-
-    def get_related_serializer(self, field, **kwargs):
-        """ Return a serializer instance for the related field """
-
-        try:
-            serializer = self.related_fields[field].serializer
-            serializer = import_string(serializer)
-            return serializer(context=self.context, **kwargs)
-        except ImportError:
-            return None
-
     def get_rtype(self):
         """ Return the string resource type as referenced by JSON API """
 
@@ -171,24 +136,6 @@ class JsonApiSerializer(serializers.Serializer):
                     excs.append(_exc)
         raise ManyExceptions(excs)
 
-    def sparse_filter(self, data):
-        """ Trim fields based on the sparse fieldset request
-
-        The JSON API spec uses the resource type (rtype) to
-        qualify which fields should be returned.
-        """
-
-        try:
-            sparse = self.context['request']._sparse_cache
-        except (AttributeError, KeyError):
-            sparse = {}
-
-        for rtype, fields in sparse.items():
-            if rtype == self.get_rtype():
-                for key in data.keys():
-                    if key not in fields:
-                        del data[key]
-
     def to_internal_value(self, data):
         """ DRF override for error handling """
 
@@ -196,6 +143,37 @@ class JsonApiSerializer(serializers.Serializer):
             return super(JsonApiSerializer, self).to_internal_value(data)
         except exceptions.ValidationError as exc:
             self.process_validation_errors(exc)
+
+    def get_relationships(self, data):
+        """ XXX """
+
+        relationships = {}
+        for key, field in self.related_fields.items():
+            relationships[key] = {
+                'links': field.get_links(data['id']),
+                'meta': field.get_meta(),
+            }
+
+            if field.linkage or key in self.context['includes']:
+                relationships[key]['data'] = data.pop(key)
+        return relationships
+
+    def to_representation_sparse(self):
+        """ Trim fields based on the sparse fields requested
+
+        The JSON API spec uses the resource type (rtype) to
+        qualify which fields should be returned.
+        """
+
+        try:
+            sparse = self.context['request']._sparse_cache
+            fields = sparse[self.get_rtype()]
+        except (AttributeError, KeyError):
+            return
+
+        for key in self.fields.keys():
+            if key not in fields:
+                del self.fields[key]
 
     def to_representation(self, instance):
         """ DRF override for consistent representation
@@ -213,13 +191,14 @@ class JsonApiSerializer(serializers.Serializer):
         Any instances used cannot have fields with those names.
         """
 
+        self.to_representation_sparse()
+
         data = super(JsonApiSerializer, self).to_representation(instance)
-
-        self.sparse_filter(data)
-
         data['links'] = self.get_data_links(instance)
         data['meta'] = self.get_data_meta()
+        data['relationships'] = self.get_relationships(data)
         data['type'] = self.get_rtype()
+
         return data
 
 

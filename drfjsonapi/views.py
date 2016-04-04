@@ -60,9 +60,9 @@ def jsonapi_exception_handler(exc, context):
     they are much more informative errors as well.
     """
 
-    # import traceback
-    # traceback.print_exc(exc)
-    # raise exc
+    import traceback
+    traceback.print_exc(exc)
+    raise exc
     response = exception_handler(exc, context)
     response.data = {'errors': []}
 
@@ -102,6 +102,27 @@ class JsonApiViewMixin(object):
     enabled on the view, via this modules filter_backends.
     """
 
+    def _get_related_view(self, view_name, action, kwargs=None):
+        """ Return the related view instance & check global perms """
+
+        view = resolve(reverse(view_name, kwargs=kwargs))
+        view = view.func.cls(
+            action=action,
+            format_kwarg=self.format_kwarg,
+            kwargs=kwargs,
+            request=self.request,
+        )
+
+        view.check_permissions(self.request)
+        return view
+
+    def get_serializer_context(self):
+        """ Let the serializer know which related fields to include """
+
+        context = super(JsonApiViewMixin, self).get_serializer_context()
+        context['includes'] = getattr(self.request, '_includes', {}).keys()
+        return context
+
     def initialize_request(self, request, *args, **kwargs):
         """ Perform some spec compliance checks as early as possible """
 
@@ -129,20 +150,6 @@ class JsonApiViewMixin(object):
                 raise InvalidSortParam(msg)
 
         return request
-
-    def _get_related_view(self, view_name, action, kwargs=None):
-        """ Return the related view instance & check global perms """
-
-        view = resolve(reverse(view_name, kwargs=kwargs))
-        view = view.func.cls(
-            action=action,
-            format_kwarg=self.format_kwarg,
-            kwargs=kwargs,
-            request=self.request,
-        )
-
-        view.check_permissions(self.request)
-        return view
 
     def render_related_detail_view(self, field, base_name):
         """ Render the related view of a single resource """

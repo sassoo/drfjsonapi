@@ -13,7 +13,6 @@ from .exceptions import (
     InvalidFilterParam,
     InvalidIncludeParam,
     InvalidSortParam,
-    ManyExceptions,
 )
 from .filter_fields import RelatedFilterField
 from .utils import _dict_merge, _reduce_str_to_dict
@@ -72,7 +71,6 @@ class FieldFilter(BaseFilterBackend):
     max_filters = 10
     max_relations = 3
     relation_sep = '__'
-    strict_mode = True
 
     def __init__(self):
         """ The superclass doesn't have an __init__ defined """
@@ -152,22 +150,14 @@ class FieldFilter(BaseFilterBackend):
     def validate_filters(self, filters, serializer):
         """ Validate all the sanitized filter query parameters """
 
-        excs = []
-
         if len(filters) > self.max_filters:
             msg = 'The request has "%s" filter query parameters which ' \
                   'exceeds the max number of "%s" that can be requested ' \
                   'in any one request' % (len(filters), self.max_filters)
-            excs.append(InvalidFilterParam(msg))
+            raise InvalidFilterParam(msg)
 
         for _filter in filters:
-            try:
-                self.validate_filter(_filter, serializer)
-            except InvalidFilterParam as exc:
-                excs.append(exc)
-
-        if self.strict_mode and excs:
-            raise ManyExceptions(excs)
+            self.validate_filter(_filter, serializer)
 
     def validate_filter(self, _filter, serializer):
         """ Validate each `filter` query param
@@ -283,8 +273,6 @@ class IncludeFilter(BaseFilterBackend):
 
     max_includes = 8
     max_relations = 3
-    relation_sep = '.'
-    strict_mode = True
 
     def __init__(self):
         """ The superclass doesn't have an __init__ defined """
@@ -309,13 +297,8 @@ class IncludeFilter(BaseFilterBackend):
         else:
             self.process_default_includes(serializer)
 
-
-
-        prefetches = self.get_prefetches()
-        queryset = queryset.prefetch_related(*prefetches)
-
-
-        request._include_cache = self._get_cache()
+        queryset = queryset.prefetch_related(*self.get_prefetches())
+        request._includes = self._get_cache()
         return queryset
 
     def _get_cache(self):
@@ -323,24 +306,14 @@ class IncludeFilter(BaseFilterBackend):
 
         cache = {}
         for key, val in self._cache.items():
-            del val['queryset']
-            val['serializer'] = val['serializer'].__class__
-
             _dict = _reduce_str_to_dict(key, val)
             _dict_merge(cache, _dict)
         return cache
 
+    def _update_cache(self, path, field):
+        """ Add an entry to the include_cache """
 
-
-    def _update_cache(self, path, field, serializer):
-
-        self._cache[path] = {
-            'field': field,
-            'queryset': serializer.get_related_queryset(field),
-            'serializer': serializer,
-        }
-
-
+        self._cache[path] = {'field': field}
 
     def get_prefetches(self):
         """ Return the list of generated Prefetch objects
@@ -351,7 +324,8 @@ class IncludeFilter(BaseFilterBackend):
 
         prefetches = []
         for field, value in self._cache.items():
-            prefetches.append(Prefetch(field, queryset=value['queryset']))
+            queryset = value['field'].get_filtered_queryset()
+            prefetches.append(Prefetch(field, queryset=queryset))
         return prefetches
 
     def get_query_includes(self, request):
@@ -366,31 +340,20 @@ class IncludeFilter(BaseFilterBackend):
         includes = list(itertools.chain(*includes))
         return tuple(set(includes))
 
-
-
     def process_default_includes(self, serializer):
-        """ XXX """
+        """ Include all of the default fields
 
-        # XXX this should look for related fields with
-        # default includes if none specified & auto
-        # include them
-        #
-        # If linkage=True and not RelatedField then
-        # prefetch as well. No need on RelatedField
-        # since it's optimized.
-        #
-        # If linkage=False and not included and not
-        # RelatedField then prefetch to none. This
-        # avoids an uneeded database hit. But how?
-        # A queryset will always be needed.
-        #
-        # Use the `prefetch` kwarg on the related field
-        # & if it's a callable run it with context
-        # otherwise if it's a Prefetch instance use it.
-        #
-        # Call get_related_prefetch on the RelatedField
-        # to get the filtered queryset if available
+        This should look for related fields with default
+        includes BUT only if none were specified through
+        an include query parameter per the JSON API spec.
 
+        It will then auto include them. This is nice for
+        related fields which should always be sideloaded
+        in where desired.
+        """
+
+        for name, field in serializer.get_related_include().items():
+            self._update_cache(name, field)
 
     def validate_includes(self, includes, serializer):
         """ Validate all the sanitized includeed query parameters """
@@ -401,18 +364,8 @@ class IncludeFilter(BaseFilterBackend):
                   % (len(includes), self.max_includes)
             raise InvalidIncludeParam(msg)
 
-        excs = []
         for include in includes:
-            try:
-                self.validate_include(include, serializer)
-            except InvalidIncludeParam as exc:
-                exc.detail = 'The "%s" include query parameter failed to ' \
-                             'validate with the following error(s): %s' \
-                             % (include, exc.detail)
-                excs.append(exc)
-
-        if self.strict_mode and excs:
-            raise ManyExceptions(excs)
+            self.validate_include(include, serializer)
 
     def validate_include(self, include, serializer):
         """ Validate each includeed query param individually
@@ -421,21 +374,23 @@ class IncludeFilter(BaseFilterBackend):
         to ensure they are allowed to be includeed.
         """
 
-        relations = include.split(self.relation_sep)
+        relations = include.split('.')
         if len(relations) > self.max_relations:
-            msg = 'Max relations limit of "%s" exceeded' % self.max_relations
+            msg = 'The "%s" include query parameter exceeds the max' \
+                  'relations limit of "%s"' % (include, self.max_relations)
             raise InvalidIncludeParam(msg)
 
         for idx, relation in enumerate(relations):
-            _serializer = serializer.get_related_serializer(relation)
-            includable = serializer.get_related_includable()
-
-            if not _serializer or relation not in includable:
-                raise InvalidIncludeParam('Missing or not allowed to include')
-
+            field = serializer.related_fields[relation]
             related_path = '__'.join(relations[:idx + 1])
-            self._update_cache(related_path, relation, _serializer)
-            serializer = _serializer
+
+            if not field.includable:
+                msg = 'The "%s" include query is either an invalid ' \
+                      'field or not allowed to be included' % include
+                raise InvalidIncludeParam(msg)
+
+            self._update_cache(related_path, field)
+            serializer = field.get_serializer()
 
 
 class OrderingFilter(_OrderingFilter):
@@ -448,10 +403,8 @@ class OrderingFilter(_OrderingFilter):
     ordering.
 
     This filter can be used to support the `sort` query param
-    for requesting ordering preferences on the primary data.
-
-    This filter is JSON API compliant with the `sort` query
-    parameter in the following mentionable ways:
+    for requesting ordering preferences on the primary data &
+    is JSON API compliant in the following mentionable ways:
 
         1. An endpoint MAY support multiple sort fields by
            allowing comma-separated (U+002C COMMA, ",") sort
@@ -466,51 +419,47 @@ class OrderingFilter(_OrderingFilter):
     ~~~~~~~~~~~~~~~~~~~~~~
 
     If the global `max_sorts` property limit is not exceeded then
-    each sort is tested for eligibility.
-
-    For a sort to be eligible it MUST meet all of the
-    following criteria:
+    each sort is tested for eligibility.  To be eligible is MUST
+    meet all of the following criteria:
 
         1. The sort cannot be a relationship sort. That is not
            supported currently & is generally frowned upon.
 
         2. Be present in the list of the DRF superclasses
            `get_valid_fields` method
+
+    Step 2 is standard DRF OrderingFilter logic so read it's
+    documentation for more info.
     """
 
     max_sorts = 3
     ordering_param = 'sort'
     relation_sep = '.'
-    strict_mode = True
 
     def remove_invalid_fields(self, queryset, sorts, view):
         """ Override the default to support exception handling """
 
-        allowed = [item[0] for item in self.get_valid_fields(queryset, view)]
+        allow = [item[0] for item in self.get_valid_fields(queryset, view)]
         order = []
-        excs = []
 
         if len(sorts) > self.max_sorts:
-            msg = 'The sort query parameter requested "%s" ordering ' \
-                  'preferences exceeding the max number of "%s"' \
+            msg = 'Sorting on "%s" fields exceeds the max number of "%s"' \
                   % (len(sorts), self.max_sorts)
             raise InvalidSortParam(msg)
 
         for sort in sorts:
-            if sort.lstrip('-') in allowed:
+            if sort.lstrip('-') in allow:
                 order.append(sort)
             elif self.relation_sep in sort:
                 msg = 'The "%s" sort query parameter is not allowed ' \
                       'due to unpredictable results when sorting on ' \
                       'relationships' % sort
-                excs.append(InvalidSortParam(msg))
+                raise InvalidSortParam(msg)
             else:
                 msg = 'The "%s" sort query parameter either does not ' \
                       'exist or you are not allowed to sort on it' % sort
-                excs.append(InvalidSortParam(msg))
+                raise InvalidSortParam(msg)
 
-        if excs and self.strict_mode:
-            raise ManyExceptions(excs)
         return order
 
 

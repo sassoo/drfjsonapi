@@ -6,7 +6,6 @@
 """
 
 from collections import Iterable, OrderedDict
-from rest_framework.relations import ManyRelatedField
 from rest_framework.renderers import JSONRenderer
 
 
@@ -59,20 +58,16 @@ class JsonApiRenderer(JSONRenderer):
         """
 
         relationships = {}
-        for field in serializer.related_fields:
+        for key, field in serializer.related_fields.items():
             # sparse fields
-            field = serializer.fields.get(field, None)
-            if isinstance(field, ManyRelatedField):
-                field = field.child_relation
-            try:
-                print 'XXX first get links then try data first get links then try data data might be absent unless includes'
-                relationships[key] = {
-                    'links': field.get_links(data['id']),
-                    'meta': field.get_meta(),
-                    'data': data.pop(key),
-                }
-            except AttributeError:
+            if key not in data:
                 continue
+
+            relationships[key] = {
+                'links': field.get_links(data['id']),
+                'meta': field.get_meta(),
+                'data': data.pop(key),
+            }
         return relationships
 
     def get_errors(self, data):
@@ -102,7 +97,7 @@ class JsonApiRenderer(JSONRenderer):
                 error['source']['pointer'] = '/data'
         return data
 
-    def _get_include(self, cache, context, models, ret):
+    def _get_include(self, field_name, cache, context, models, ret):
         """ Given a cache dict & models serialize them
 
         This is self-referential walking the cache tree that
@@ -115,27 +110,30 @@ class JsonApiRenderer(JSONRenderer):
         """
 
         field = cache['field']
-        serializer = cache['serializer']
 
         for model in models:
             try:
-                _models = getattr(model, field).all()
+                related = getattr(model, field_name).all()
             except AttributeError:
-                if not getattr(model, field):
+                if not getattr(model, field_name):
                     continue
-                _models = [getattr(model, field)]
+                related = [getattr(model, field_name)]
 
-            for _model in _models:
-                _serializer = serializer(_model, context=context)
+            for _model in related:
+                # get a fresh serializer each time!!
+                # XXX document it in case fields are altered
+                # depending on the instance!
+                context['include'] = cache.keys()
+                _serializer = field.get_serializer(_model, context=context)
                 data = self.get_data(_serializer.data, _serializer)
 
                 # no dupes
                 if data not in ret:
                     ret.append(data)
 
-            for val in cache.values():
-                if isinstance(val, dict):
-                    self._get_include(val, context, _models, ret)
+            for key, val in cache.items():
+                if key != 'field':
+                    self._get_include(key, val, context, related, ret)
 
     def get_included(self, resources, serializer, request):
         """ Return the top level "Included Resources" array
@@ -148,7 +146,7 @@ class JsonApiRenderer(JSONRenderer):
         itself or the primary data.
 
         The drfjsonapi `IncludeFilter` adds a private property
-        to the request object named `_inclusion_cache` which
+        to the request object named `_includes` which
         greatly reduces the complexity of this process.
 
         TIP: read the documentation of the `IncludeFilter`
@@ -167,8 +165,8 @@ class JsonApiRenderer(JSONRenderer):
         if not isinstance(models, Iterable):
             models = [models]
 
-        for val in request._inclusion_cache.values():
-            self._get_include(val, serializer.context, models, ret)
+        for key, val in request._includes.items():
+            self._get_include(key, val, serializer.context, models, ret)
 
         # remove dupes from primary data
         return [data for data in ret if data not in resources]
