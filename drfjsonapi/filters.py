@@ -29,7 +29,12 @@ from rest_framework.filters import (
 __all__ = ('FieldFilter', 'IncludeFilter', 'OrderingFilter', 'SparseFilter')
 
 
-class FieldFilter(BaseFilterBackend):
+class JsonApiFilter(object):
+    """ For easy `isinstance` checks """
+    pass
+
+
+class FieldFilter(JsonApiFilter, BaseFilterBackend):
     """ Support the filtering of arbitrary resource fields
 
     This filter can be used to support the `filter` query param
@@ -199,7 +204,7 @@ class FieldFilter(BaseFilterBackend):
                 self.generate_filter(related_path, lookup, value)
 
 
-class IncludeFilter(BaseFilterBackend):
+class IncludeFilter(JsonApiFilter, BaseFilterBackend):
     """ Support the include of compound documents
 
     JSON API details
@@ -391,7 +396,7 @@ class IncludeFilter(BaseFilterBackend):
             serializer = field.get_serializer()
 
 
-class OrderingFilter(_OrderingFilter):
+class OrderingFilter(JsonApiFilter, _OrderingFilter):
     """ Override default OrderingFilter to be JSON API compliant
 
     JSON API details
@@ -461,7 +466,7 @@ class OrderingFilter(_OrderingFilter):
         return order
 
 
-class SparseFilter(BaseFilterBackend):
+class SparseFilter(JsonApiFilter, BaseFilterBackend):
     """ Support the limiting of responses to only specific fields
 
     JSON API details

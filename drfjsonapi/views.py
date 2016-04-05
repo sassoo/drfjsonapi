@@ -6,6 +6,7 @@
 """
 
 from .exceptions import (
+    InternalError,
     InvalidFieldParam,
     InvalidFilterParam,
     InvalidIncludeParam,
@@ -63,8 +64,6 @@ def jsonapi_exception_handler(exc, context):
     # import traceback
     # traceback.print_exc(exc)
     # raise exc
-    response = exception_handler(exc, context)
-    response.data = {'errors': []}
 
     if isinstance(exc, Http404):
         exc = ResourceNotFound()
@@ -80,6 +79,11 @@ def jsonapi_exception_handler(exc, context):
         exc.title = 'Permission denied'
     elif isinstance(exc, exceptions.UnsupportedMediaType):
         exc = UnsupportedMediaType()
+    elif not isinstance(exc, exceptions.APIException):
+        exc = InternalError()
+
+    response = exception_handler(exc, context)
+    response.data = {'errors': []}
 
     if isinstance(exc, ManyExceptions):
         for _exc in exc.excs:

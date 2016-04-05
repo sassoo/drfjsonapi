@@ -228,3 +228,19 @@ class ResourceError(ValidationError):
     """ Global resource level ValidationError """
 
     title = 'Resource level validation error'
+
+
+"""
+    500 Internal Server Error
+    ~~~~~~~~~~~~~~~~~~~~~~~~
+"""
+
+
+class InternalError(exceptions.APIException):
+    """ Something unexpected puked within our API """
+
+    default_detail = 'Our service had an unexpected internal error. ' \
+                     'It could be transient so please retry your request.'
+    link = 'https://tools.ietf.org/html/rfc7231#section-6.6.1'
+    status_code = 500
+    title = 'The request had an unexpected error'
