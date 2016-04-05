@@ -60,9 +60,9 @@ def jsonapi_exception_handler(exc, context):
     they are much more informative errors as well.
     """
 
-    import traceback
-    traceback.print_exc(exc)
-    raise exc
+    # import traceback
+    # traceback.print_exc(exc)
+    # raise exc
     response = exception_handler(exc, context)
     response.data = {'errors': []}
 
@@ -154,12 +154,11 @@ class JsonApiViewMixin(object):
     def render_related_detail_view(self, field, base_name):
         """ Render the related view of a single resource """
 
-        name = '%s-detail' % base_name
-        view = self._get_related_view(name, 'retrieve', kwargs={
-            'pk': getattr(self.get_object(), field),
-        })
-
         try:
+            name = '%s-detail' % base_name
+            view = self._get_related_view(name, 'retrieve', kwargs={
+                'pk': getattr(self.get_object(), field),
+            })
             return view.retrieve(self.request)
         except Http404:
             return Response(None)
@@ -169,6 +168,5 @@ class JsonApiViewMixin(object):
 
         name = '%s-list' % base_name
         view = self._get_related_view(name, 'list')
-        print 'XXX security leak without filter'
         view.queryset = getattr(self.get_object(), field).all()
         return view.list(self.request)

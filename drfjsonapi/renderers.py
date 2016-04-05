@@ -37,24 +37,32 @@ class JsonApiRenderer(JSONRenderer):
         for error in data['errors']:
             pointer = error['source']['pointer']
 
-            if error['code'] == 'RelationshipError':
-                error['source']['pointer'] = '/data/relationships%s' % pointer
-            elif error['code'] == 'FieldError':
+            if error['code'] == 'FieldError':
                 error['source']['pointer'] = '/data/attributes%s' % pointer
+            elif error['code'] == 'RelationshipError':
+                error['source']['pointer'] = '/data/relationships%s' % pointer
             elif error['code'] == 'ResourceError':
                 error['source']['pointer'] = '/data'
         return data
 
+    # pylint: disable=too-many-arguments
     def _get_include(self, field_name, cache, context, models, ret):
         """ Given a cache dict & models serialize them
 
-        This is self-referential walking the cache tree that
-        was created by the `IncludeFilter`. It ensure no dupes
-        exist within the compound documents array but doesn't
-        do anything with the primary data.
+        This is a self-referential walking of the cache tree
+        that was created by the `IncludeFilter`. It ensures
+        no dupes exist within the compound documents array
+        but doesn't do anything with the primary data.
 
         It does not return anything & instead has mutation
         side-effects of the inclusion array `ret`.
+
+        WARN: this is probably computationally expensive
+              in several way. By dupe checking & by creating
+              a fresh serializer for each model.
+
+              Fresh serializers are used just in case fields
+              are dynamically altered on a per model basis.
         """
 
         field = cache['field']
@@ -68,12 +76,8 @@ class JsonApiRenderer(JSONRenderer):
                 related = [getattr(model, field_name)]
 
             for _model in related:
-                # get a fresh serializer each time!!
-                # XXX document it in case fields are altered
-                # depending on the instance!
                 context['include'] = cache.keys()
                 data = field.get_serializer(_model, context=context).data
-
                 # no dupes
                 if data not in ret:
                     ret.append(data)
@@ -93,8 +97,8 @@ class JsonApiRenderer(JSONRenderer):
         itself or the primary data.
 
         The drfjsonapi `IncludeFilter` adds a private property
-        to the request object named `_includes` which
-        greatly reduces the complexity of this process.
+        to the request object named `_includes` which greatly
+        reduces the complexity of this process.
 
         TIP: read the documentation of the `IncludeFilter`
              class for more information.
@@ -149,7 +153,7 @@ class JsonApiRenderer(JSONRenderer):
         """ Return the top level "Meta" object
 
         We include some helpful counters from the pagination
-        results.
+        results otherwise it's empty.
         """
 
         return pager.get('meta', {})
@@ -173,7 +177,16 @@ class JsonApiRenderer(JSONRenderer):
         }
 
     def render(self, data, media_type=None, renderer_context=None):
-        """ DRF entry point """
+        """ DRF entry point
+
+        `data` can be quite a few different data formats
+        unforutnately. It could be a single resource dict,
+        None (no single resource), an array of many resource
+        dicts with paging info, an empty array, or an "Errors"
+        object.
+
+        This should be handled better somehow I'd imagine.
+        """
 
         pager = {}
         request = renderer_context['request']

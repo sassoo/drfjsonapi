@@ -28,7 +28,7 @@ class JsonApiSerializer(serializers.Serializer):
 
     @property
     def related_fields(self):
-        """ Return a dict of relationship fields """
+        """ Return `self.fields` but limited to relationship fields """
 
         fields = {}
         for name, field in self.fields.items():
@@ -39,34 +39,6 @@ class JsonApiSerializer(serializers.Serializer):
             elif isinstance(field, ResourceRelatedField):
                 fields[name] = field
         return fields
-
-    def get_data_links(self, instance):
-        """ Return the "Links" object for an individual resource
-
-        This should return a dict that is compliant with the
-        document links section of the JSON API spec. Specifically,
-        the links section of an individual "Resource Object".
-
-        :spec:
-            jsonapi.org/format/#document-links
-        """
-
-        rtype = self.get_rtype()
-        resource_url = _get_resource_url(rtype, instance.id, self.context)
-        return {'self': resource_url}
-
-    def get_data_meta(self):
-        """ Return the "Meta" object for an individual resource
-
-        This should return a dict that is compliant with the
-        document meta section of the JSON API spec. Specifically,
-        the links section of an individual "Resource Object".
-
-        :spec:
-            jsonapi.org/format/#document-meta
-        """
-
-        return {}
 
     def get_filterable_fields(self):
         """ Return a dict of fields allowed to be filtered on
@@ -83,15 +55,63 @@ class JsonApiSerializer(serializers.Serializer):
         fields = getattr(self.Meta, 'filterable_fields', {})
         return {k: v for k, v in fields.items() if not v.write_only}
 
-    def get_related_includable(self):
-        """ Return a dict of readable fields that are includable """
+    def get_links(self, instance):
+        """ Return the "Links" object for an individual resource
 
-        return {k: v for k, v in self.related_fields.items() if v.includable}
+        This should return a dict that is compliant with the
+        document links section of the JSON API spec. Specifically,
+        the links section of an individual "Resource Object".
 
-    def get_related_include(self):
-        """ Return a dict of readable fields to include by default """
+        :spec:
+            jsonapi.org/format/#document-links
+        """
 
-        return {k: v for k, v in self.related_fields.items() if v.include}
+        rtype = self.get_rtype()
+        resource_url = _get_resource_url(rtype, instance.id, self.context)
+        return {'self': resource_url}
+
+    def get_meta(self):
+        """ Return the "Meta" object for an individual resource
+
+        This should return a dict that is compliant with the
+        document meta section of the JSON API spec. Specifically,
+        the links section of an individual "Resource Object".
+
+        :spec:
+            jsonapi.org/format/#document-meta
+        """
+
+        return {}
+
+    def get_relationships(self, data):
+        """ Return the "Relationships Object" for a resource
+
+        This should return a dict that is compliant with the
+        "Relationships Object" section of the JSON API spec.
+        Specifically, the contents of the top level `relationships`
+        member of an individual resource boject.
+
+        Relationships always get top-level links & meta objects
+        but if they have been included or require "Linkage" then
+        the "Resource Linkage" is added to the object as well.
+
+        Often to-one relationships will have linkage=True while
+        to-many's won't since there could be alot of them.
+
+        :spec:
+            jsonapi.org/format/#document-resource-object-relationships
+        """
+
+        relationships = {}
+        for key, field in self.related_fields.items():
+            relationships[key] = {
+                'links': field.get_links(data['id']),
+                'meta': field.get_meta(),
+            }
+
+            if field.linkage or key in self.context['includes']:
+                relationships[key]['data'] = data.pop(key)
+        return relationships
 
     def get_rtype(self):
         """ Return the string resource type as referenced by JSON API """
@@ -144,20 +164,6 @@ class JsonApiSerializer(serializers.Serializer):
         except exceptions.ValidationError as exc:
             self.process_validation_errors(exc)
 
-    def get_relationships(self, data):
-        """ XXX """
-
-        relationships = {}
-        for key, field in self.related_fields.items():
-            relationships[key] = {
-                'links': field.get_links(data['id']),
-                'meta': field.get_meta(),
-            }
-
-            if field.linkage or key in self.context['includes']:
-                relationships[key]['data'] = data.pop(key)
-        return relationships
-
     def to_representation_sparse(self):
         """ Trim fields based on the sparse fields requested
 
@@ -188,11 +194,12 @@ class JsonApiSerializer(serializers.Serializer):
 
         self.to_representation_sparse()
 
+        print 'related query still occurs even if linkage=False included'
         data = super(JsonApiSerializer, self).to_representation(instance)
         return {
             'attributes': data,
-            'links': self.get_data_links(instance),
-            'meta': self.get_data_meta(),
+            'links': self.get_links(instance),
+            'meta': self.get_meta(),
             'relationships': self.get_relationships(data),
             'type': self.get_rtype(),
             'id': data.pop('id'),

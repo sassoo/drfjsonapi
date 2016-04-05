@@ -227,11 +227,6 @@ class IncludeFilter(BaseFilterBackend):
     specified in the query string. It will collect all of them &
     uniquify them into a single tuple for validation checking.
 
-    In the case of guideline #3, a ManyException will be raised
-    containing an InvalidIncludeParam exception for each include
-    that fails validation checks. This allows the requestor to
-    identify all of the errors in one round-turn.
-
     Implementation details
     ~~~~~~~~~~~~~~~~~~~~~~
 
@@ -251,14 +246,11 @@ class IncludeFilter(BaseFilterBackend):
            includes. For example, '?include=foo.bar.baz'
            would be 3 relations.
 
-        2. Exist in the list of the `get_include_field_names`
-           method of the serializer
+        2. Be a readable field with the includable property
+           set to True
 
-        3. Return a serializer for the field from a call to the
-           serializers `get_related_serializer` method.
-
-    The last step is needed to confirm a proper configuration
-    since any includeed fields require there own serializer.
+        3. Return a serializer for the field from a call
+           to the fields `get_serializer` method.
 
     Each individual relation in an include will be validated
     according to steps 2-3. An include of 'actor.movies' for
@@ -268,7 +260,11 @@ class IncludeFilter(BaseFilterBackend):
     All vetted includes will then have prefetching logic attached
     to the primary datasets queryset for efficiency. You can also
     define a default queryset for each Prefetch object by returning
-    one from the serializers `get_related_queryset` method.
+    one from the fields `get_filtered_queryset` method.
+
+    Finally, if no includes are provided in the query param
+    then any fields on the serializer with the `include` attr
+    set to True will be automatically prefetech & included.
     """
 
     max_includes = 8
@@ -318,8 +314,9 @@ class IncludeFilter(BaseFilterBackend):
     def get_prefetches(self):
         """ Return the list of generated Prefetch objects
 
-        Order is important with django & that's why an OrderedDict
-        is used.
+        Order is important with django & that's why an
+        OrderedDict is used. This will call the fields
+        `get_filtered_queryset` method for extra filtering.
         """
 
         prefetches = []
@@ -331,8 +328,8 @@ class IncludeFilter(BaseFilterBackend):
     def get_query_includes(self, request):
         """ Return the sanitized `include` query parameters
 
-        Handles comma separated & multiple include params & return
-        a tuple of duplicate free strings
+        Handles comma separated & multiple include params &
+        returns a tuple of duplicate free strings
         """
 
         includes = request.query_params.getlist('include')
@@ -349,11 +346,12 @@ class IncludeFilter(BaseFilterBackend):
 
         It will then auto include them. This is nice for
         related fields which should always be sideloaded
-        in where desired.
+        where desired.
         """
 
-        for name, field in serializer.get_related_include().items():
-            self._update_cache(name, field)
+        for name, field in serializer.related_fields.items():
+            if field.include:
+                self._update_cache(name, field)
 
     def validate_includes(self, includes, serializer):
         """ Validate all the sanitized includeed query parameters """
@@ -466,15 +464,35 @@ class OrderingFilter(_OrderingFilter):
 class SparseFilter(BaseFilterBackend):
     """ Support the limiting of responses to only specific fields
 
+    JSON API details
+    ~~~~~~~~~~~~~~~~
+
+    The JSON API spec reserves the `fields` query parameter for
+    limiting fields that should be returned in the response.
+
     This filter can be used to support the `fields` query param
     for requesting only a subset of fields to be returned on a
-    resource type basis.
+    per resource type basis & is JSON API compliant in the
+    following mentionable ways:
+
+        1. The value of the fields parameter MUST be a
+           comma-separated (U+002C COMMA, ",") list that
+           refers to the name(s) of the fields to be returned.
+
+        2. If a client requests a restricted set of fields for
+           a given resource type, an endpoint MUST NOT include
+           additional fields in resource objects of that type
+           in its response.
+
+    Implementation details
+    ~~~~~~~~~~~~~~~~~~~~~~
 
     Currently, this doesn't do any validation or limiting of
-    the Django queryset. We could eventually use something like
-    `defer()` but this could cause performance issues if not
-    done properly. Instead, the pruning of fields is done by
-    the serializer.
+    the django queryset. Instead, the pruning of fields is
+    done by the serializer.
+
+    We could eventually use something like `defer()` but
+    this could cause performance issues if not done properly.
     """
 
     def filter_queryset(self, request, queryset, view):
@@ -495,15 +513,15 @@ class SparseFilter(BaseFilterBackend):
 
         A dict will be generated for each match containing the
         resource type in the fields query param as the key with
-        a tuple value of fields to limit to.
+        a tuple value of fields to limit.
 
         An example fields of `fields[actors]=name,movies` would
         return a dict of:
 
-            {'actors': ['name', 'movies']}
+            {'actors': ['name', 'movies', 'id', 'type']}
 
-        NOTE: the `id` & `type` members are always returned
-              no matter the fields query param.
+        The `id` & `type` members are always returned no matter
+        the fields query param.
         """
 
         sparse_fields = {}

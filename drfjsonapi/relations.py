@@ -109,7 +109,7 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
         There are tickets about it & it's left to the app
         developers currently.
 
-        This method will be caused by the view filters to
+        This method will be called by the view filters to
         hopefully settle on a meaningful convention. The
         queryset will be used in prefetches & filters.
         """
@@ -188,7 +188,7 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
     def get_serializer(self, *args, **kwargs):
         """ Return a serializer instance for the related field
 
-        If a context isn't passed then used the existing one so
+        If a context isn't passed then use the existing one so
         the serializer is init'd with the request & what not.
         """
 
