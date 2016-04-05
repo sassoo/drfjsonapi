@@ -28,8 +28,9 @@ def related_route(*args, **kwargs):
         jsonapi.org/format/#document-resource-object-related-resource-links
     """
 
+    kwargs['filter_backends'] = kwargs.pop('filter_backends', ())
     kwargs['url_path'] = kwargs.pop('relation')
-    return detail_route(*args, filter_backends=(), **kwargs)
+    return detail_route(*args, **kwargs)
 
 
 def relationship_route(*args, **kwargs):
@@ -43,5 +44,6 @@ def relationship_route(*args, **kwargs):
         jsonapi.org/format/#fetching-relationships
     """
 
+    kwargs['filter_backends'] = kwargs.pop('filter_backends', ())
     kwargs['url_path'] = 'relationships/%s' % kwargs.pop('relation')
-    return detail_route(*args, filter_backends=(), **kwargs)
+    return detail_route(*args, **kwargs)
