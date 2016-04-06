@@ -122,7 +122,7 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
     def _update_related_filter(self, related_path, field):
         """ Generate & store an ORM based filter on the filter param """
 
-        queryset = field.get_filterted_queryset()
+        queryset = field.get_filtered_queryset()
         if queryset is not None:
             self._filters['%s__in' % related_path] = queryset
 
