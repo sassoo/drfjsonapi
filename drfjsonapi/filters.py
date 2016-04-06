@@ -145,10 +145,10 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
         the field to filter on (could be a relationship), the filter
         operator, and the value to filter with (right of the = sign).
 
-        An example filter of `filter[home__city__exact]=Orlando`
+        An example filter of `filter[home.city.exact]=Orlando`
         would return a tuple of:
 
-            ('filter[home__city__exact]', 'home_city', 'exact', 'Orlando')
+            ('filter[home.city.exact]', 'home.city', 'exact', 'Orlando')
 
         :return:
             tuple of tuples
