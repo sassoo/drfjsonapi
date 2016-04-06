@@ -53,7 +53,10 @@ class JsonApiSerializer(serializers.Serializer):
 
         # pylint: disable=no-member
         fields = getattr(self.Meta, 'filterable_fields', {})
-        return {k: v for k, v in fields.items() if not v.write_only}
+        return {
+            k: v for k, v in fields.items()
+            if not self.fields[k].write_only
+        }
 
     def get_links(self, instance):
         """ Return the "Links" object for an individual resource

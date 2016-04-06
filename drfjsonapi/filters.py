@@ -37,9 +37,20 @@ class JsonApiFilter(object):
 class FieldFilter(JsonApiFilter, BaseFilterBackend):
     """ Support the filtering of arbitrary resource fields
 
+    JSON API details
+    ~~~~~~~~~~~~~~~~
+
     This filter can be used to support the `filter` query param
     for requesting arbitrary filtering strategies related to the
-    primary data requested.
+    primary data requested according to the JSON API spec.
+
+    Per JSON API spec, it's agnostic about how filtering is done
+    but it does outline some examples which are adopted. Namely,
+    the filter query param brackets the field, optionally, with
+    dot notation relationships.
+
+    Implementation details
+    ~~~~~~~~~~~~~~~~~~~~~~
 
     The `filter_queryset` entry point method requires the view
     provided to have a `get_serializer` method which is already
@@ -47,20 +58,23 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
     serializer for the primary data.
 
     That serializer will be used to validate the `filter` query
-    param values. For a field to be eligible for filtering it
-    MUST meet all of the following criteria:
+    param values. If the global `max_filters` property limit is
+    not exceeded then each filter is tested for eligibility.
+
+    For a field to be eligible for it MUST meet all of the
+    following criteria:
 
         1. Not exceed the `max_relations` limit of nested
-           includes. For example, '?filter[foo__bar__baz]=hi'
+           filters. For example, '?filter[foo__bar__baz]=hi'
            would be 3 relations.
 
-        2. Exist in the keys() list of the `get_filter_fields`
-           method of the serializer
+        2. Exist as a key in the `get_filterable_fields` dict
+           when called on the serializer
 
-        3. Related fields must use the RelatedFilterField class
-           in the `get_filter_fields` values() list. Also, related
-           fields must return a serializer for the field from a
-           call to the serializers `get_related_serializer` method.
+        3. Related fields must use the RelatedFilterField.
+           Also, related fields must return a serializer from
+           the fields `get_serializer` method (not the filter
+           field but the serializers field)
 
         4. Contain a valid lookup operator in the FilterFields
            `lookups` attribute list.
@@ -70,12 +84,12 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
     All vetted filters will have filter logic attached to the
     primary datasets queryset. You can also define an additional
     mandatory default queryset for each FilterField object by
-    returning one from the serializers `get_related_queryset` method.
+    returning one from the serializer fields `get_filtered_queryset`
+    method.
     """
 
     max_filters = 10
     max_relations = 3
-    relation_sep = '__'
 
     def __init__(self):
         """ The superclass doesn't have an __init__ defined """
@@ -94,21 +108,21 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
                   'from "get_serializer()"'
             raise ImproperlyConfigured(msg % self.__class__.__name__)
 
-        filters = self.get_filter_params(request)
+        filters = self.get_query_filters(request)
         if filters:
             self.validate_filters(filters, serializer)
             queryset = queryset.filter(**self.get_filters())
         return queryset
 
-    def generate_filter(self, related_path, lookup, value):
+    def _update_filter(self, related_path, lookup, value):
         """ Generate & store an ORM based filter on the filter param """
 
         self._filters['%s__%s' % (related_path, lookup)] = value
 
-    def generate_related_filter(self, related_path, field_name, serializer):
+    def _update_related_filter(self, related_path, field):
         """ Generate & store an ORM based filter on the filter param """
 
-        queryset = serializer.get_related_queryset(field_name)
+        queryset = field.get_filterted_queryset()
         if queryset is not None:
             self._filters['%s__in' % related_path] = queryset
 
@@ -117,7 +131,7 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
 
         return self._filters
 
-    def get_filter_params(self, request):
+    def get_query_filters(self, request):
         """ Return the sanitized `filter` query parameters
 
         Loop through all the query parameters & use a regular
@@ -141,14 +155,12 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
         """
 
         filters = []
-        regex = re.compile(r'^filter\[([A-Za-z0-9_]+)\]$')
+        regex = re.compile(r'^filter\[([A-Za-z0-9_.]+)\]$')
 
         for param, value in request.query_params.items():
             match = regex.match(param)
             if match:
-                field, _, lookup = match.groups()[0].rpartition(
-                    self.relation_sep
-                )
+                field, _, lookup = match.groups()[0].rpartition('.')
                 filters.append((param, field, lookup, value))
         return tuple(filters)
 
@@ -157,8 +169,8 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
 
         if len(filters) > self.max_filters:
             msg = 'The request has "%s" filter query parameters which ' \
-                  'exceeds the max number of "%s" that can be requested ' \
-                  'in any one request' % (len(filters), self.max_filters)
+                  'exceeds the max number of "%s" that can be requested.' \
+                  % (len(filters), self.max_filters)
             raise InvalidFilterParam(msg)
 
         for _filter in filters:
@@ -172,7 +184,7 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
         """
 
         param, field, lookup, value = _filter
-        relations = field.split(self.relation_sep)
+        relations = field.split('.')
 
         if len(relations) > self.max_relations:
             msg = 'The "%s" filter query parameter exceeds the max ' \
@@ -180,9 +192,9 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
             raise InvalidFilterParam(msg)
 
         for idx, relation in enumerate(relations):
-            related_path = self.relation_sep.join(relations[:idx + 1])
+            related_path = '__'.join(relations[:idx + 1])
             try:
-                filter_field = serializer.get_filter_fields()[relation]
+                filter_field = serializer.get_filterable_fields()[relation]
                 filter_field.validate(lookup, value)
             except (AttributeError, KeyError):
                 msg = 'The "%s" filter query parameter is invalid, the ' \
@@ -197,11 +209,11 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
                 raise InvalidFilterParam(msg)
 
             if isinstance(filter_field, RelatedFilterField):
-                self.generate_related_filter(related_path, relation,
-                                             serializer)
-                serializer = serializer.get_related_serializer(relation)
+                field = serializer.fields[relation]
+                self._update_related_filter(related_path, field)
+                serializer = field.get_serializer()
             else:
-                self.generate_filter(related_path, lookup, value)
+                self._update_filter(related_path, lookup, value)
 
 
 class IncludeFilter(JsonApiFilter, BaseFilterBackend):

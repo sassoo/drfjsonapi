@@ -35,7 +35,7 @@ class JsonApiRenderer(JSONRenderer):
         """
 
         for error in data['errors']:
-            pointer = error['source']['pointer']
+            pointer = error['source'].get('pointer', None)
 
             if error['code'] == 'FieldError':
                 error['source']['pointer'] = '/data/attributes%s' % pointer
