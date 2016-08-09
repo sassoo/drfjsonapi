@@ -6,13 +6,13 @@
     compliant API.
 """
 
-from .utils import _get_resource_url, _get_url
 from django.utils.module_loading import import_string
 from django.utils.translation import ugettext_lazy as _
 from rest_framework.relations import (
     ManyRelatedField,
     PrimaryKeyRelatedField,
 )
+from .utils import _get_resource_url, _get_url
 
 
 def _get_field_name(field):

@@ -12,9 +12,9 @@
            expected by DRF serializers.
 """
 
-from .renderers import JsonApiRenderer
 from rest_framework import exceptions
 from rest_framework.parsers import JSONParser
+from .renderers import JsonApiRenderer
 
 
 class JsonApiParser(JSONParser):

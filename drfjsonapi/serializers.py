@@ -8,6 +8,10 @@
     JsonApiSerializer
 """
 
+from django.core.exceptions import ImproperlyConfigured
+from rest_framework import exceptions
+from rest_framework import serializers
+from rest_framework.relations import ManyRelatedField
 from .exceptions import (
     FieldError,
     ManyExceptions,
@@ -16,10 +20,6 @@ from .exceptions import (
 )
 from .relations import ResourceRelatedField
 from .utils import _get_resource_url
-from django.core.exceptions import ImproperlyConfigured
-from rest_framework import exceptions
-from rest_framework import serializers
-from rest_framework.relations import ManyRelatedField
 
 
 # pylint: disable=abstract-method
@@ -152,11 +152,10 @@ class JsonApiSerializer(serializers.Serializer):
             for field, errors in exc.detail.items():
                 for error in errors:
                     if field in self.related_fields:
-                        _exc = RelationshipError(error)
+                        excs.append(RelationshipError(error))
                     else:
-                        _exc = FieldError(error)
-                    _exc.source = {'pointer': '/%s' % field}
-                    excs.append(_exc)
+                        excs.append(FieldError(error))
+                    excs[-1].source = {'pointer': '/%s' % field}
         raise ManyExceptions(excs)
 
     def to_internal_value(self, data):

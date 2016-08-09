@@ -9,13 +9,6 @@
 import itertools
 import re
 
-from .exceptions import (
-    InvalidFilterParam,
-    InvalidIncludeParam,
-    InvalidSortParam,
-)
-from .filter_fields import RelatedFilterField
-from .utils import _dict_merge, _reduce_str_to_dict
 from collections import OrderedDict
 from django.core.exceptions import ImproperlyConfigured
 from django.db.models.query import Prefetch
@@ -24,6 +17,13 @@ from rest_framework.filters import (
     BaseFilterBackend,
     OrderingFilter as _OrderingFilter,
 )
+from .exceptions import (
+    InvalidFilterParam,
+    InvalidIncludeParam,
+    InvalidSortParam,
+)
+from .filter_fields import RelatedFilterField
+from .utils import _dict_merge, _reduce_str_to_dict
 
 
 __all__ = ('FieldFilter', 'IncludeFilter', 'OrderingFilter', 'SparseFilter')

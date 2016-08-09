@@ -5,6 +5,12 @@
     Custom views mostly for consistent exception handling
 """
 
+from django.core.urlresolvers import resolve, reverse
+from django.http import Http404
+from rest_framework import exceptions
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework.views import exception_handler
 from .exceptions import (
     InternalError,
     InvalidFieldParam,
@@ -12,33 +18,24 @@ from .exceptions import (
     InvalidIncludeParam,
     InvalidPageParam,
     InvalidSortParam,
-    ManyExceptions,
     MethodNotAllowed,
     NotAcceptable,
     ResourceNotFound,
     RouteNotFound,
     UnsupportedMediaType,
 )
-from .filters import *
+from .filters import (
+    FieldFilter,
+    IncludeFilter,
+    OrderingFilter,
+    SparseFilter,
+)
 from .pagination import JsonApiPagination
 from .status_codes import status_codes
 from .utils import _random_str
-from django.core.urlresolvers import resolve, reverse
-from django.http import Http404
-from rest_framework import exceptions
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework.views import exception_handler
 
 
-@api_view()
-def page_not_found(*args, **kwargs):  # pylint: disable=unused-argument
-    """ Custom 404 endpoint not found view """
-
-    raise RouteNotFound()
-
-
-def generate_error_object(exc):
+def _get_error(exc):
     """ Same order as error members documented in JSON API """
 
     return {
@@ -53,18 +50,37 @@ def generate_error_object(exc):
     }
 
 
+def _get_errors(response, exc):
+    """ Set the root 'errors' key of the exception(s)
+
+    The exception could be a ManyException containing
+    multiple APIExceptions or a single APIException. Either
+    way JSON API requires an 'errors' root key with an array.
+    """
+
+    response.data = {'errors': []}
+    for _exc in getattr(exc, 'excs', [exc]):
+        response.data['errors'].append(_get_error(_exc))
+    return response
+
+
 def jsonapi_exception_handler(exc, context):
     """ DRF custom exception handler for a JSON API backend
 
-    The bulk of the work is substituting native DRF exceptions
-    with our own that are more JSON API complete. Generally,
-    they are much more informative errors as well.
+    Turn the response payload into an array of "Error" objects.
+    This will call the native DRF exception_handler which returns
+    a response object that is further made JSON API compliant.
+
+    This is done by calling _get_error() on each exception
+    which will create a unique `id` for the error among
+    other standard JSON API compliant key/vals.
     """
 
     # import traceback
     # traceback.print_exc(exc)
     # raise exc
 
+    # pylint: disable=redefined-variable-type
     if isinstance(exc, Http404):
         exc = ResourceNotFound()
     elif isinstance(exc, exceptions.MethodNotAllowed):
@@ -83,15 +99,14 @@ def jsonapi_exception_handler(exc, context):
         exc = InternalError()
 
     response = exception_handler(exc, context)
-    response.data = {'errors': []}
+    return _get_errors(response, exc)
 
-    if isinstance(exc, ManyExceptions):
-        for _exc in exc.excs:
-            response.data['errors'].append(generate_error_object(_exc))
-    elif isinstance(exc, exceptions.APIException):
-        response.data['errors'].append(generate_error_object(exc))
 
-    return response
+@api_view()
+def page_not_found(*args, **kwargs):  # pylint: disable=unused-argument
+    """ Custom 404 endpoint not found view """
+
+    raise RouteNotFound()
 
 
 class JsonApiViewMixin(object):
