@@ -103,7 +103,7 @@ def jsonapi_exception_handler(exc, context):
 
 
 @api_view()
-def page_not_found(*args, **kwargs):  # pylint: disable=unused-argument
+def page_not_found(*args, **kwargs):
     """ Custom 404 endpoint not found view """
 
     raise RouteNotFound()
