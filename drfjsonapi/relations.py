@@ -38,8 +38,6 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
     """
 
     default_error_messages = {
-        'invalid': _('Invalid syntax. Relationship assignment requires a dict '
-                     'with type & id keys is required'),
         'rtype_conflict': _('Incorrect resource type of "{given}". Only '
                             '"{rtype}" resource types are accepted'),
     }
@@ -215,11 +213,11 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
 
         try:
             rid, rtype = data['id'], data['type']
+            if self.rtype != rtype:
+                self.fail('rtype_conflict', given=rtype, rtype=self.rtype)
         except (KeyError, TypeError):
-            self.fail('invalid')
+            rid = None
 
-        if self.rtype != rtype:
-            self.fail('rtype_conflict', given=rtype, rtype=self.rtype)
         return super(ResourceRelatedField, self).to_internal_value(rid)
 
     def to_representation(self, value):

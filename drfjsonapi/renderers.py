@@ -107,15 +107,16 @@ class JsonApiRenderer(JSONRenderer):
             jsonapi.org/format/#document-resource-objects
         """
 
-        ret = []
-        if not resources or not serializer.instance:
-            return ret
-
-        # could be single resource or many
-        models = serializer.instance
-        if not isinstance(models, Iterable):
+        # could be single resource or many or serializer is None
+        # if single then coerce into list
+        models = getattr(serializer, 'instance')
+        if models and not isinstance(models, Iterable):
             models = [models]
 
+        if not all((resources, models, hasattr(request, '_includes'))):
+            return []
+
+        ret = []
         for key, val in request._includes.items():
             self._get_include(key, val, serializer.context, models, ret)
 
