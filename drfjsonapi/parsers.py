@@ -69,10 +69,10 @@ class JsonApiParser(JSONParser):
     def _normalize_relationships(relationships):
         """ Get all the relationships by key/val & return them
 
-        A normalized relationship dict uses the key name without
-        any alteration but the value will be the `id` provided
-        in the payload if present. If not present, then the client
-        wants to unset the relationship so it will be set to None.
+        A normalized relationship dict uses the key name & value
+        without any alteration if present. If not present, then
+        the client wants to unset the relationship so it will be
+        set to None.
 
         INFO: only works for to-one relationships.
 
@@ -87,7 +87,7 @@ class JsonApiParser(JSONParser):
             if not val['data']:
                 ret[key] = None
             else:
-                ret[key] = val['data']['id']
+                ret[key] = val['data']
 
         return ret
 
@@ -173,8 +173,8 @@ class JsonApiParser(JSONParser):
 
                 if not rid or not rtype:
                     self.fail('%s relationship\'s resource linkage MUST '
-                              'contain `id` & `type` fields. Additionally, '
-                              'they must both be strings.' % key, link)
+                              'contain `id` & `type` fields if setting '
+                              'otherwise null if unsetting.' % key, link)
             elif isinstance(val['data'], list):
                 self.deny('Modifying the %s relationship or any to-many '
                           'relationships for that matter are is not '
