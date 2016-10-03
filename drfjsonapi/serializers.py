@@ -101,6 +101,11 @@ class JsonApiSerializer(serializers.Serializer):
         Often to-one relationships will have linkage=True while
         to-many's won't since there could be alot of them.
 
+        NOTE: if the fields include=True then we don't worry
+              about it here because the IncludesFilter will
+              process all those defaults & populate the context's
+              `includes` keys.
+
         :spec:
             jsonapi.org/format/#document-resource-object-relationships
         """
@@ -108,12 +113,14 @@ class JsonApiSerializer(serializers.Serializer):
         relationships = {}
         for key, field in self.related_fields.items():
             relationships[key] = {
+                'data': data.pop(key),
                 'links': field.get_links(data['id']),
                 'meta': field.get_meta(),
             }
 
-            if field.linkage or key in self.context['includes']:
-                relationships[key]['data'] = data.pop(key)
+            if not any((field.linkage, key in self.context['includes'])):
+                del relationships[key]['data']
+
         return relationships
 
     def get_rtype(self):

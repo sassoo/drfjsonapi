@@ -49,7 +49,7 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
     rtype = None
     serializer = None
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, **kwargs):
         """ Process our custom attrs so DRF doesn't barf """
 
         attrs = ('includable', 'include', 'linkage', 'related_view',
@@ -58,7 +58,7 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
             val = kwargs.pop(attr, getattr(self, attr))
             setattr(self, attr, val)
 
-        super(ResourceRelatedField, self).__init__(*args, **kwargs)
+        super(ResourceRelatedField, self).__init__(**kwargs)
 
     def get_data(self, rid):
         """ Return the relationships "Resource Linkage" object
@@ -225,3 +225,27 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
 
         rid = super(ResourceRelatedField, self).to_representation(value)
         return self.get_data(rid)
+
+
+class ManyResourceRelatedField(ResourceRelatedField):
+    """ JSON API related field for relationships
+
+    This field can be used as a drop-in replacement for the
+    DRF PrimaryKeyRelatedField with many=True.
+    """
+
+    linkage = False
+
+    def __init__(self, **kwargs):
+        """ Currently we only support read-only many's """
+
+        kwargs['read_only'] = True
+        super(ManyResourceRelatedField, self).__init__(**kwargs)
+
+    def __new__(cls, *args, **kwargs):
+        """ Currently we only support read-only many's """
+
+        if not hasattr(cls, '_many_already_set'):
+            kwargs['many'] = True
+            cls._many_already_set = True
+        return super(ManyResourceRelatedField, cls).__new__(cls, *args, **kwargs)

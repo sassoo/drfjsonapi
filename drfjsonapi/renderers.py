@@ -5,7 +5,7 @@
     DRF renderer that is compliant with the JSON API spec
 """
 
-from collections import Iterable, OrderedDict
+from collections import OrderedDict
 from rest_framework.renderers import JSONRenderer
 
 
@@ -107,14 +107,18 @@ class JsonApiRenderer(JSONRenderer):
             jsonapi.org/format/#document-resource-objects
         """
 
-        # could be single resource or many or serializer is None
+        # could be single model or many or serializer is None
         # if single then coerce into list
         models = getattr(serializer, 'instance')
-        if models and not isinstance(models, Iterable):
+        if models and not isinstance(models, list):
             models = [models]
 
         if not all((resources, models, hasattr(request, '_includes'))):
             return []
+        # could be a ReturnDict or ReturnList but coerce
+        # into list so simple 'in' checks can work later
+        elif resources and not isinstance(resources, list):
+            resources = [resources]
 
         ret = []
         for key, val in request._includes.items():

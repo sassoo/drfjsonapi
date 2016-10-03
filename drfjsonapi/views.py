@@ -5,6 +5,8 @@
     Custom views mostly for consistent exception handling
 """
 
+import traceback
+
 from django.core.urlresolvers import resolve, reverse
 from django.http import Http404
 from rest_framework import exceptions
@@ -76,10 +78,6 @@ def jsonapi_exception_handler(exc, context):
     other standard JSON API compliant key/vals.
     """
 
-    # import traceback
-    # traceback.print_exc(exc)
-    # raise exc
-
     # pylint: disable=redefined-variable-type
     if isinstance(exc, Http404):
         exc = ResourceNotFound()
@@ -96,6 +94,7 @@ def jsonapi_exception_handler(exc, context):
     elif isinstance(exc, exceptions.UnsupportedMediaType):
         exc = UnsupportedMediaType()
     elif not isinstance(exc, exceptions.APIException):
+        traceback.print_exc(exc)  # print it
         exc = InternalError()
 
     response = exception_handler(exc, context)
