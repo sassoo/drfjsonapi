@@ -232,20 +232,26 @@ class ManyResourceRelatedField(ResourceRelatedField):
 
     This field can be used as a drop-in replacement for the
     DRF PrimaryKeyRelatedField with many=True.
+
+    A factory is probaby a way better pattern & if this needs
+    any additional tweaking at all then I'm going to remove it
+    cause it's a pain-in-the-ass! The alternative is to just
+    pass `many=True` cause way too much horrible shit is taking
+    place to avoid that one param.
     """
 
-    linkage = False
-
     def __init__(self, **kwargs):
-        """ Currently we only support read-only many's """
 
-        kwargs['read_only'] = True
+        del kwargs['_many_invoked']
         super(ManyResourceRelatedField, self).__init__(**kwargs)
 
     def __new__(cls, *args, **kwargs):
-        """ Currently we only support read-only many's """
 
-        if not hasattr(cls, '_many_already_set'):
-            kwargs['many'] = True
-            cls._many_already_set = True
-        return super(ManyResourceRelatedField, cls).__new__(cls, *args, **kwargs)
+        kwargs['linkage'] = False
+        kwargs['read_only'] = True
+
+        if '_many_invoked' not in kwargs:
+            kwargs['_many_invoked'] = True
+            return cls.many_init(*args, **kwargs)
+        return super(ManyResourceRelatedField, cls).__new__(cls, *args,
+                                                            **kwargs)
