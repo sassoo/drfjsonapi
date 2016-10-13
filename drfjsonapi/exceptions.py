@@ -180,6 +180,22 @@ class ConflictError(exceptions.APIException):
     title = 'Resource conflict error'
 
 
+class RtypeConflict(ConflictError):
+    """ Custom ConflictError when a resource type is invalid for the route """
+
+    default_detail = 'Incorrect resource type of "{given}". Only ' \
+                     '"{rtype}" resource types are accepted'
+    link = 'http://jsonapi.org/format/#crud-creating-responses-409'
+    source = {'pointer': '/data/type'}
+    title = 'Invalid resource type'
+
+    def __init__(self, given, rtype, source='/data/type'):
+        """ Initialize the default message """
+
+        detail = self.default_detail.format(given=given, rtype=rtype)
+        super(RtypeConflict, self).__init__(detail)
+
+
 """
     415 Unsupported Media Type
     ~~~~~~~~~~~~~~~~~~~~~~~~~~

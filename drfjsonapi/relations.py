@@ -209,6 +209,11 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
 
         however if the relationship is not set it will simply
         be None.
+
+        The spec is not clear if a 409 is required when the type
+        doesn't match the expected rtype of the relationship
+        like it is with the primary resource object. We return
+        a 422 because it works better with DRF. This may change.
         """
 
         try:
