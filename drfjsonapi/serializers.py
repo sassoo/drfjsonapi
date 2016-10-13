@@ -90,14 +90,6 @@ class JsonApiSerializer(serializers.Serializer):
 
         return {}
 
-    def get_model_rtype(self):
-        """ Try to determine the rtype from the models type field """
-
-        try:
-            return self.Meta.model._meta.get_field('type').default
-        except (AttributeError, FieldDoesNotExist):
-            return None
-
     def get_relationships(self, data):
         """ Return the "Relationships Object" for a resource
 
@@ -139,11 +131,10 @@ class JsonApiSerializer(serializers.Serializer):
         """ Return the string resource type as referenced by JSON API """
 
         # pylint: disable=no-member
-        rtype = getattr(self.Meta, 'rtype', self.get_model_rtype())
+        rtype = getattr(self.Meta, 'rtype', None)
         if not rtype:
-            msg = '"%s" should either include a `Meta.rtype` attribute, ' \
-                  'override `get_rtype()` or `get_model_rtype()`, or ' \
-                  'define a model field named `type`' % self.__class__.__name__
+            msg = '"%s" should either include a `Meta.rtype` attribute ' \
+                  'or override `get_rtype()`' % self.__class__.__name__
             raise ImproperlyConfigured(msg)
         return rtype
 
@@ -246,4 +237,11 @@ class JsonApiSerializer(serializers.Serializer):
 
 class JsonApiModelSerializer(JsonApiSerializer, serializers.ModelSerializer):
     """ JSON API ModelSerializer """
-    pass
+
+    def get_rtype(self):
+        """ Try to determine the rtype from the models type field """
+
+        try:
+            return self.Meta.model._meta.get_field('type').default
+        except (AttributeError, FieldDoesNotExist):
+            return super(JsonApiModelSerializer, self).get_rtype()
