@@ -8,7 +8,10 @@
     JsonApiSerializer
 """
 
-from django.core.exceptions import ImproperlyConfigured
+from django.core.exceptions import (
+    FieldDoesNotExist,
+    ImproperlyConfigured,
+)
 from rest_framework import exceptions
 from rest_framework import serializers
 from rest_framework.relations import ManyRelatedField
@@ -17,6 +20,7 @@ from .exceptions import (
     ManyExceptions,
     RelationshipError,
     ResourceError,
+    RtypeConflict,
 )
 from .relations import ResourceRelatedField
 from .utils import _get_resource_url
@@ -86,6 +90,14 @@ class JsonApiSerializer(serializers.Serializer):
 
         return {}
 
+    def get_model_rtype(self):
+        """ Try to determine the rtype from the models type field """
+
+        try:
+            return self.Meta.model._meta.get_field('type').default
+        except (AttributeError, FieldDoesNotExist):
+            return None
+
     def get_relationships(self, data):
         """ Return the "Relationships Object" for a resource
 
@@ -126,12 +138,14 @@ class JsonApiSerializer(serializers.Serializer):
     def get_rtype(self):
         """ Return the string resource type as referenced by JSON API """
 
-        try:
-            return getattr(self, 'Meta').rtype
-        except AttributeError:
+        # pylint: disable=no-member
+        rtype = getattr(self.Meta, 'rtype', self.get_model_rtype())
+        if not rtype:
             msg = '"%s" should either include a `Meta.rtype` attribute, ' \
-                  'or override `get_rtype()`' % self.__class__.__name__
+                  'override `get_rtype()` or `get_model_rtype()`, or ' \
+                  'define a model field named `type`' % self.__class__.__name__
             raise ImproperlyConfigured(msg)
+        return rtype
 
     def is_valid(self, **kwargs):
         """ DRF override for error handling """
@@ -174,7 +188,14 @@ class JsonApiSerializer(serializers.Serializer):
         raise ManyExceptions(excs)
 
     def to_internal_value(self, data):
-        """ DRF override for error handling """
+        """ DRF override for error handling
+
+        Per the spec, first ensure the resource type provided
+        matches that which is expected by this serializer.
+        """
+
+        if data['type'] != self.get_rtype():
+            raise RtypeConflict(given=data['type'], rtype=self.get_rtype())
 
         try:
             return super(JsonApiSerializer, self).to_internal_value(data)
