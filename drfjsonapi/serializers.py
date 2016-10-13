@@ -133,8 +133,16 @@ class JsonApiSerializer(serializers.Serializer):
                   'or override `get_rtype()`' % self.__class__.__name__
             raise ImproperlyConfigured(msg)
 
+    def is_valid(self, **kwargs):
+        """ DRF override for error handling """
+
+        try:
+            return super(JsonApiSerializer, self).is_valid(**kwargs)
+        except exceptions.ValidationError as exc:
+            self.process_validation_errors(exc)
+
     def process_validation_errors(self, exc):
-        """ This should be called by `to_internal_value`
+        """ This should be called when handling serializer exceptions
 
         Turn each DRF ValidationError error message in the
         `detail` property into an individual drfjsonapi
