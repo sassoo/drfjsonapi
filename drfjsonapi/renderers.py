@@ -109,7 +109,7 @@ class JsonApiRenderer(JSONRenderer):
 
         # could be single model or many or serializer is None
         # if single then coerce into list
-        models = getattr(serializer, 'instance')
+        models = getattr(serializer, 'instance', None)
         if models and not isinstance(models, list):
             models = [models]
 
