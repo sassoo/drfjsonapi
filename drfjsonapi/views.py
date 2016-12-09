@@ -160,7 +160,7 @@ class JsonApiViewMixin(object):
                 msg = '"include" query parameters are not supported'
                 raise InvalidIncludeParam(msg)
             elif param.startswith('page['):
-                if not isinstance(self.pagination_class, JsonApiPagination):
+                if not issubclass(self.pagination_class, JsonApiPagination):
                     msg = '"page" query parameters are not supported'
                     raise InvalidPageParam(msg)
             elif param == 'sort' and OrderingFilter not in filters:
