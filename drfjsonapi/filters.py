@@ -396,12 +396,13 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
             raise InvalidIncludeParam(msg)
 
         for idx, relation in enumerate(relations):
-            field = serializer.related_fields[relation]
+            field = serializer.related_fields.get(relation)
             related_path = '__'.join(relations[:idx + 1])
 
-            if not field.includable:
-                msg = 'The "%s" include query is either an invalid ' \
-                      'field or not allowed to be included' % include
+            if not field or not field.includable:
+                msg = 'The "%s" include query parameter requested is ' \
+                      'either an invalid field or not allowed to be ' \
+                      'included' % include
                 raise InvalidIncludeParam(msg)
 
             self._update_cache(related_path, field)
