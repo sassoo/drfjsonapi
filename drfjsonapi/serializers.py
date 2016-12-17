@@ -62,6 +62,14 @@ class JsonApiSerializer(serializers.Serializer):
             if not self.fields[k].write_only
         }
 
+    def get_includable_fields(self):
+        """ Return `self.related_fields` but limitied to includable fields """
+
+        return {
+            k: v for k, v in self.related_fields.items()
+            if v.includable
+        }
+
     def get_links(self, instance):
         """ Return the "Links" object for an individual resource
 
