@@ -34,15 +34,6 @@ class JsonApiRenderer(JSONRenderer):
             jsonapi.org/format/#errors
         """
 
-        for error in data['errors']:
-            pointer = error['source'].get('pointer', None)
-
-            if error['code'] == 'FieldError':
-                error['source']['pointer'] = '/data/attributes%s' % pointer
-            elif error['code'] == 'RelationshipError':
-                error['source']['pointer'] = '/data/relationships%s' % pointer
-            elif error['code'] == 'ResourceError':
-                error['source']['pointer'] = '/data'
         return data
 
     # pylint: disable=too-many-arguments
