@@ -189,7 +189,7 @@ class RtypeConflict(ConflictError):
     source = {'pointer': '/data/type'}
     title = 'Invalid resource type'
 
-    def __init__(self, given, rtype, source='/data/type'):
+    def __init__(self, given, rtype):
         """ Initialize the default message """
 
         detail = self.default_detail.format(given=given, rtype=rtype)
@@ -233,17 +233,30 @@ class FieldError(ValidationError):
 
     title = 'Field validation error'
 
+    def __init__(self, field, *args, **kwargs):
+        """ Initialize the default message """
+
+        self.source = {'pointer': '/data/attributes/%s' % field}
+        super(FieldError, self).__init__(*args, **kwargs)
+
 
 class RelationshipError(ValidationError):
     """ Field level ValidationError but for relationships """
 
     title = 'Relationship field validation error'
 
+    def __init__(self, field, *args, **kwargs):
+        """ Initialize the default message """
+
+        self.source = {'pointer': '/data/relationships/%s' % field}
+        super(RelationshipError, self).__init__(*args, **kwargs)
+
 
 class ResourceError(ValidationError):
     """ Global resource level ValidationError """
 
     title = 'Resource level validation error'
+    source = {'pointer': '/data'}
 
 
 """

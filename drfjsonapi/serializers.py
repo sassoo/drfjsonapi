@@ -172,18 +172,42 @@ class JsonApiSerializer(serializers.Serializer):
         different renderers.
         """
 
+        def _flatten(init, lkey=''):
+            """ Recursively flatten embedded data types
+
+            For embedded field types like a JSONField go through
+            & convert the error key to a '/' separated string
+            flattening them into a single dict.
+
+            This allows for proper pointers in the error object
+            """
+
+            ret = {}
+            for rkey, val in init.items():
+                key = lkey + rkey
+                if isinstance(val, dict):
+                    ret.update(_flatten(val, key + '/'))
+                else:
+                    ret[key] = val
+            return ret
+
         excs = []
         if isinstance(exc.detail, list):
             for error in exc.detail:
                 excs.append(ResourceError(error))
         else:
+            # prune the dict of all related field errors
             for field, errors in exc.detail.items():
                 for error in errors:
                     if field in self.related_fields:
-                        excs.append(RelationshipError(error))
-                    else:
-                        excs.append(FieldError(error))
-                    excs[-1].source = {'pointer': '/%s' % field}
+                        excs.append(RelationshipError(error, field))
+                        del exc.detail[field]
+
+            # only field errors left now
+            for field, errors in _flatten(exc.detail).items():
+                for error in errors:
+                    excs.append(FieldError(field, error))
+
         raise ManyExceptions(excs)
 
     def to_internal_value(self, data):
