@@ -122,13 +122,13 @@ class RouteNotFound(GenericNotFound):
 
 
 """
-    405 Method Now Allowed
+    405 Method Not Allowed
     ~~~~~~~~~~~~~~~~~~~~~~
 """
 
 
 class MethodNotAllowed(exceptions.APIException):
-    """ Custom 405 Method Now Allowed error for more info """
+    """ Custom 405 Method Not Allowed error for more info """
 
     default_detail = 'The "{method}" is not allowed at that endpoint. ' \
                      'Only "{allowed_methods}" methods are allowed for ' \
