@@ -452,7 +452,7 @@ class OrderingFilter(JsonApiFilter, _OrderingFilter):
     ordering_param = 'sort'
     relation_sep = '.'
 
-    def remove_invalid_fields(self, queryset, sorts, view):
+    def remove_invalid_fields(self, queryset, sorts, view, request):
         """ Override the default to support exception handling """
 
         allow = [item[0] for item in self.get_valid_fields(queryset, view)]
