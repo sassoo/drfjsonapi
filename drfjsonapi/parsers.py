@@ -169,8 +169,8 @@ class JsonApiParser(JSONParser):
 
             if isinstance(val['data'], dict):
                 data = val['data']
-                rid = isinstance(data.get('id'), unicode)
-                rtype = isinstance(data.get('type'), unicode)
+                rid = isinstance(data.get('id'), str)
+                rtype = isinstance(data.get('type'), str)
 
                 if not rid or not rtype:
                     self.fail('%s relationship\'s resource linkage MUST '
@@ -200,7 +200,7 @@ class JsonApiParser(JSONParser):
         if not resource.get('type'):
             self.fail('JSON API requires that every resource object MUST '
                       'contain a `type` top-level key.', link)
-        elif not isinstance(resource['type'], unicode):
+        elif not isinstance(resource['type'], str):
             self.fail('The top-level `type` key in resource objects MUST '
                       'be a string.', link)
 
@@ -209,7 +209,7 @@ class JsonApiParser(JSONParser):
                 self.fail('JSON API requires that every resource object '
                           'MUST contain an `id` top-level key when making '
                           'an update.', link)
-            elif not isinstance(resource['id'], unicode):
+            elif not isinstance(resource['id'], str):
                 self.fail('The top-level `id` key in resource objects MUST '
                           'be a string.', link)
             elif resource['id'] != req.parser_context['kwargs']['pk']:
