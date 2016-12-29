@@ -255,7 +255,7 @@ class JsonApiSerializer(serializers.Serializer):
 
         self.to_representation_sparse()
 
-        print 'related query still occurs even if linkage=False included'
+        print('related query still occurs even if linkage=False included')
         data = super(JsonApiSerializer, self).to_representation(instance)
         return {
             'attributes': data,
