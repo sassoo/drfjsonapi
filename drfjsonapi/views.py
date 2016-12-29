@@ -94,7 +94,7 @@ def jsonapi_exception_handler(exc, context):
     elif isinstance(exc, exceptions.UnsupportedMediaType):
         exc = UnsupportedMediaType()
     elif not isinstance(exc, exceptions.APIException):
-        traceback.print_exc(exc)  # print it
+        traceback.print_exc()  # print it
         exc = InternalError()
 
     response = exception_handler(exc, context)
