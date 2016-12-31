@@ -197,10 +197,10 @@ class JsonApiSerializer(serializers.Serializer):
                 excs.append(ResourceError(error))
         else:
             # prune the dict of all related field errors
-            for field, errors in exc.detail.items():
-                for error in errors:
+            for field in list(exc.detail):
+                for error in exc.detail[field]:
                     if field in self.related_fields:
-                        excs.append(RelationshipError(error, field))
+                        excs.append(RelationshipError(field, error))
                         del exc.detail[field]
 
             # only field errors left now
