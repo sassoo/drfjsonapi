@@ -327,7 +327,6 @@ class JsonApiModelSerializer(JsonApiSerializer, serializers.ModelSerializer):
             # pylint: disable=no-member
             return self.Meta.model._meta.get_field(field).default
 
-
     def to_internal_value(self, data):
         """ DRF override to intialize model defaults for convenience
 
@@ -342,7 +341,7 @@ class JsonApiModelSerializer(JsonApiSerializer, serializers.ModelSerializer):
         exist in the data so how do you sanely get a value
         during validation?
 
-        This looks for a `drfjsonapi_init_defaults` meta array
+        This looks for a `init_data_defaults` meta array
         of field names where `get_with_default()` will be called
         to pupulate `data` with a functioning default so you can
         keep things DRY & not get hit by this complex corner
@@ -351,7 +350,7 @@ class JsonApiModelSerializer(JsonApiSerializer, serializers.ModelSerializer):
 
         data = super(JsonApiModelSerializer, self).to_internal_value(data)
         # pylint: disable=no-member
-        init_defaults = getattr(self.Meta, 'drfjsonapi_init_defaults', [])
+        init_defaults = getattr(self.Meta, 'init_data_defaults', [])
 
         for field in init_defaults:
             data[field] = self.get_with_default(data, field)

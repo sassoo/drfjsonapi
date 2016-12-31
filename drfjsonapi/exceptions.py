@@ -236,7 +236,10 @@ class FieldError(ValidationError):
     def __init__(self, field, *args, **kwargs):
         """ Initialize the default message """
 
-        self.source = {'pointer': '/data/attributes/%s' % field}
+        if field.startswith('/'):
+            self.source = {'pointer': field}
+        else:
+            self.source = {'pointer': '/data/attributes/%s' % field}
         super(FieldError, self).__init__(*args, **kwargs)
 
 
@@ -255,8 +258,8 @@ class RelationshipError(ValidationError):
 class ResourceError(ValidationError):
     """ Global resource level ValidationError """
 
-    title = 'Resource level validation error'
     source = {'pointer': '/data'}
+    title = 'Resource level validation error'
 
 
 """

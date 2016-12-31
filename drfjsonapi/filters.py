@@ -65,7 +65,7 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
     following criteria:
 
         1. Not exceed the `max_relations` limit of nested
-           filters. For example, '?filter[foo__bar__baz]=hi'
+           filters. For example, '?filter[foo.bar.baz.exact]=hi'
            would be 3 relations.
 
         2. Exist as a key in the `get_filterable_fields` dict
@@ -138,7 +138,7 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
         expression to find all the filters that match a format
         of:
 
-            filter[<field>__<lookup>]=<value>
+            filter[<field>.<lookup>]=<value>
 
         A tuple will be generated for each match containing the
         query parameter without the value (left of the = sign),

@@ -14,12 +14,14 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 from .exceptions import (
+    FieldError,
     InternalError,
     InvalidFieldParam,
     InvalidFilterParam,
     InvalidIncludeParam,
     InvalidPageParam,
     InvalidSortParam,
+    ManyExceptions,
     MethodNotAllowed,
     NotAcceptable,
     ResourceNotFound,
@@ -55,7 +57,7 @@ def _get_error(exc):
 def _get_errors(response, exc):
     """ Set the root 'errors' key of the exception(s)
 
-    The exception could be a ManyException containing
+    The exception could be a ManyExceptions containing
     multiple APIExceptions or a single APIException. Either
     way JSON API requires an 'errors' root key with an array.
     """
@@ -93,6 +95,12 @@ def jsonapi_exception_handler(exc, context):
         exc.title = 'Permission denied'
     elif isinstance(exc, exceptions.UnsupportedMediaType):
         exc = UnsupportedMediaType()
+    elif isinstance(exc, exceptions.ValidationError):
+        excs = ManyExceptions([])
+        for field, errors in exc.detail.items():
+            for error in errors:
+                excs.excs.append(FieldError('/' + field, error))
+        exc = excs
     elif not isinstance(exc, exceptions.APIException):
         traceback.print_exc()  # print it
         exc = InternalError()
@@ -102,7 +110,7 @@ def jsonapi_exception_handler(exc, context):
 
 
 @api_view()
-def page_not_found(*args, **kwargs):
+def page_not_found():
     """ Custom 404 endpoint not found view """
 
     raise RouteNotFound()
