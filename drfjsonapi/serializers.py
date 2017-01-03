@@ -8,10 +8,7 @@
     JsonApiSerializer
 """
 
-from django.core.exceptions import (
-    FieldDoesNotExist,
-    ImproperlyConfigured,
-)
+from django.core.exceptions import ImproperlyConfigured
 from rest_framework import exceptions
 from rest_framework import serializers
 from rest_framework.relations import ManyRelatedField
@@ -301,57 +298,4 @@ class JsonApiSerializer(serializers.Serializer):
 class JsonApiModelSerializer(JsonApiSerializer, serializers.ModelSerializer):
     """ JSON API ModelSerializer """
 
-    def get_rtype(self):
-        """ Try to determine the rtype from the models type field """
-
-        try:
-            return self.Meta.model._meta.get_field('type').default
-        except (AttributeError, FieldDoesNotExist):
-            return super(JsonApiModelSerializer, self).get_rtype()
-
-    def get_with_default(self, data, field):
-        """ Find the value or find a default
-
-        First `data` is checked (incoming request data) & if
-        not there due to not being required the existing instance
-        is checked if available (partial update). If no instance
-        is present (creating) the get the default from the Django
-        model directly.
-        """
-
-        try:
-            return data[field]
-        except KeyError:
-            return getattr(self.instance, field)
-        except AttributeError:
-            # pylint: disable=no-member
-            return self.Meta.model._meta.get_field(field).default
-
-    def to_internal_value(self, data):
-        """ DRF override to intialize model defaults for convenience
-
-        Sometimes a field or fields have defaults defined on the
-        model which DRF implicitly makes NOT required. However,
-        during validation it becomes complex if those values
-        are needed & trying to discover them is messy during
-        create or partial update.
-
-        In the case of creation, no `self.instance` exists &
-        during partial_update the field in question may not
-        exist in the data so how do you sanely get a value
-        during validation?
-
-        This looks for a `init_data_defaults` meta array
-        of field names where `get_with_default()` will be called
-        to pupulate `data` with a functioning default so you can
-        keep things DRY & not get hit by this complex corner
-        case.
-        """
-
-        data = super(JsonApiModelSerializer, self).to_internal_value(data)
-        # pylint: disable=no-member
-        init_defaults = getattr(self.Meta, 'init_data_defaults', [])
-
-        for field in init_defaults:
-            data[field] = self.get_with_default(data, field)
-        return data
+    pass
