@@ -5,8 +5,9 @@
     DRF renderer that is compliant with the JSON API spec
 """
 
-from collections import OrderedDict
+from collections import Iterable, OrderedDict
 from rest_framework.renderers import JSONRenderer
+from .utils import _get_related_field
 
 
 class JsonApiRenderer(JSONRenderer):
@@ -50,12 +51,11 @@ class JsonApiRenderer(JSONRenderer):
         field = cache['field']
 
         for model in models:
-            try:
-                related = getattr(model, field_name).all()
-            except AttributeError:
-                if not getattr(model, field_name):
-                    continue
-                related = [getattr(model, field_name)]
+            related = _get_related_field(model, field_name)
+            if not related:
+                continue
+            elif not isinstance(related, Iterable):
+                related = [related]
 
             for _model in related:
                 context['include'] = cache.keys()
