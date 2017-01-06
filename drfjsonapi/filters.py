@@ -263,8 +263,8 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
            includes. For example, '?include=foo.bar.baz'
            would be 3 relations.
 
-        2. Be a readable field with the includable property
-           set to True
+        2. Be a readable field present in the serializers
+           `get_includable_fields` dict
 
         3. Return a serializer for the field from a call
            to the fields `get_serializer` method.
@@ -280,8 +280,8 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
     one from the fields `get_filtered_queryset` method.
 
     Finally, if no includes are provided in the query param
-    then any fields on the serializer with the `include` attr
-    set to True will be automatically prefetech & included.
+    then any fields returned from `get_default_include_fields`
+    on serializers will be automatically prefeteched & included.
     """
 
     max_includes = 8
@@ -366,9 +366,8 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
         where desired.
         """
 
-        for name, field in serializer.get_includable_fields().items():
-            if field.include:
-                self._update_cache(name, field)
+        for name, field in serializer.get_default_include_fields().items():
+            self._update_cache(name, field)
 
     def validate_includes(self, includes, serializer):
         """ Validate all the sanitized includeed query parameters """

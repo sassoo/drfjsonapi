@@ -44,28 +44,47 @@ class JsonApiSerializer(serializers.Serializer):
     def get_filterable_fields(self):
         """ Return a dict of fields allowed to be filtered on
 
-        By default the `Meta.filterable_fields` property is
-        used to source the items.
+        By default the `JsonApiMeta.filterable_fields` property
+        is used to source the items.
 
         The key of each item is the string name of the field &
         the value is the `FilterField` object instance. Only
         readable fields will be returned for your safety.
         """
 
-        # pylint: disable=no-member
-        fields = getattr(self.Meta, 'filterable_fields', {})
-        return {
-            k: v for k, v in fields.items()
-            if not self.fields[k].write_only
-        }
+        try:
+            return {
+                k: v for k, v in self.JsonApiMeta.filterable_fields.items()
+                if not self.fields[k].write_only
+            }
+        except AttributeError:
+            return {}
+
+    def get_default_include_fields(self):
+        """ Return the default related fields to include
+
+        This is only used if the requestor did not explicitly
+        request includes per the JSON API spec.
+        """
+
+        try:
+            return {
+                k: v for k, v in self.get_includable_fields.items()
+                if k in self.JsonApiMeta.default_include_fields
+            }
+        except (AttributeError, TypeError):
+            return {}
 
     def get_includable_fields(self):
         """ Return `self.related_fields` but limitied to includable fields """
 
-        return {
-            k: v for k, v in self.related_fields.items()
-            if v.includable
-        }
+        try:
+            return {
+                k: v for k, v in self.related_fields.items()
+                if k in self.JsonApiMeta.includable_fields
+            }
+        except (AttributeError, TypeError):
+            return {}
 
     def get_links(self, instance):
         """ Return the "Links" object for an individual resource
@@ -110,7 +129,7 @@ class JsonApiSerializer(serializers.Serializer):
         Often to-one relationships will have linkage=True while
         to-many's won't since there could be alot of them.
 
-        NOTE: if the fields include=True then we don't worry
+        NOTE: if the field is included then we don't worry
               about it here because the IncludesFilter will
               process all those defaults & populate the context's
               `includes` keys.
@@ -136,9 +155,10 @@ class JsonApiSerializer(serializers.Serializer):
         """ Return the string resource type as referenced by JSON API """
 
         # pylint: disable=no-member
-        rtype = getattr(self.Meta, 'rtype', None)
+        meta = getattr(self, 'JsonApiMeta', None)
+        rtype = getattr(meta, 'rtype', None)
         if not rtype:
-            msg = '"%s" should either include a `Meta.rtype` attribute ' \
+            msg = '"%s" must either have a `JsonApiMeta.rtype` attribute ' \
                   'or override `get_rtype()`' % self.__class__.__name__
             raise ImproperlyConfigured(msg)
         return rtype

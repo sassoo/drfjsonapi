@@ -42,23 +42,25 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
                             '"{rtype}" resource types are accepted'),
     }
 
-    includable = True
-    include = False
     linkage = True
     related_view = None
-    rtype = None
     serializer = None
 
     def __init__(self, **kwargs):
         """ Process our custom attrs so DRF doesn't barf """
 
-        attrs = ('includable', 'include', 'linkage', 'related_view',
-                 'rtype', 'serializer')
+        attrs = ('linkage', 'related_view', 'serializer')
         for attr in attrs:
             val = kwargs.pop(attr, getattr(self, attr))
             setattr(self, attr, val)
 
         super(ResourceRelatedField, self).__init__(**kwargs)
+
+    @property
+    def rtype(self):
+        """ """
+
+        return self.get_serializer().get_rtype()
 
     def get_data(self, rid):
         """ Return the relationships "Resource Linkage" object
