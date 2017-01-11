@@ -317,7 +317,7 @@ class JsonApiModelSerializer(JsonApiSerializer, serializers.ModelSerializer):
 
 
 class PolymorphicSerializer(JsonApiSerializer):
-    """ A very basic Polymorphic serializer
+    """ A very basic READ-ONLY Polymorphic serializer
 
     To use this each instance, typically a Django model,
     must have a designated field with a value that can be
@@ -339,17 +339,7 @@ class PolymorphicSerializer(JsonApiSerializer):
 
     The `polymorphic_serializers` property is an iterable
     containing all of the serializers that may be backing
-    the instances & data.
-
-    Implementation Details
-    ~~~~~~~~~~~~~~~~~~~~~~
-
-    The approach is similar to DRF's ListSerializer where
-    native serializer methods are "proxied" to the underlying
-    serializer.
-
-    That means this should override every method or property
-    the ListSerializer calls against the `child` attribute.
+    the instances.
     """
 
     def __init__(self, *args, **kwargs):
@@ -379,7 +369,7 @@ class PolymorphicSerializer(JsonApiSerializer):
         """ Return the string instance field name """
 
         meta = getattr(self, 'JsonApiMeta', None)
-        return getattr(meta, 'polymorphic_instance_field', None)
+        return getattr(meta, 'polymorphic_instance_field', 'rtype')
 
     def get_polymorphic_serializers(self):
         """ Initialize all the backing serializers & return them """
@@ -388,40 +378,14 @@ class PolymorphicSerializer(JsonApiSerializer):
         serializers = getattr(meta, 'polymorphic_serializers', ())
         return [s(context=self.context) for s in serializers]
 
-    def get_polymorphic_serializer(self, item):
-        """ Given an instance or dict find the right serializer
-
-        Always presume it's a dict first since the caller
-        could be changing the type in an update. Fallback
-        to looking at the instance last.
-        """
+    def get_polymorphic_serializer(self, instance):
+        """ Given an instance find the right serializer """
 
         instance_field = self.get_polymorphic_instance_field()
-        try:
-            rtype = item.get('type', item.get(instance_field))
-        except AttributeError:
-            rtype = getattr(item, instance_field)
+        rtype = getattr(instance, instance_field)
         for serializer in self.polymorphic_serializers:
             if serializer.get_rtype() == rtype:
                 return serializer
-
-    def create(self, validated_data):
-        """ DRF override, no type key present instead use instance_field """
-
-        serializer = self.get_polymorphic_serializer(validated_data)
-        return serializer.create(validated_data)
-
-    def update(self, instance, validated_data):
-        """ DRF override, no type key present instead use instance_field """
-
-        serializer = self.get_polymorphic_serializer(validated_data)
-        return serializer.update(instance, validated_data)
-
-    def run_validation(self, data):
-        """ DRF override, use the type key """
-
-        serializer = self.get_polymorphic_serializer(data)
-        return serializer.run_validation(data)
 
     def to_representation(self, data):
         """ DRF override, use the instance_field on the instance """
