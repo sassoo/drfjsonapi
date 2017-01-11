@@ -9,6 +9,7 @@
 """
 
 from django.core.exceptions import ImproperlyConfigured
+from django.utils.functional import cached_property
 from rest_framework import exceptions
 from rest_framework import serializers
 from rest_framework.relations import ManyRelatedField
@@ -315,120 +316,115 @@ class JsonApiModelSerializer(JsonApiSerializer, serializers.ModelSerializer):
     pass
 
 
-class PolymorphicModelSerializer(JsonApiModelSerializer):
-    """ To be used with a JsonApiModelSerializer
+class PolymorphicSerializer(JsonApiSerializer):
+    """ A very basic Polymorphic serializer
 
-    To use this, each model must have a designated field
-    with a value that can be relied upon for distringuishing
-    which serializer to use. The values MUST also be the
-    JSON API "resource type" also known as rtype for the
-    underlying model.
+    To use this each instance, typically a Django model,
+    must have a designated field with a value that can be
+    relied upon for distringuishing which serializer to use.
+    The value MUST also be the JSON API "resource type" also
+    known as rtype for the underlying instance.
 
-    The model field is specified by a `polymorphic_model_field`
+    The instance field is specified by a `polymorphic_instance_field`
     property on the JsonApiMeta object:
 
     ```
     class JsonApiMeta:
-        rtype = 'books'
-        polymorphic_model_field = 'rtype'
-        polymorphic_mapping = {
-            'paperback': PaperbackSerializer,
-            'hardcover': HardcoverSerializer,
-        }
+        polymorphic_instance_field = 'species'
+        polymorphic_serializers = (
+            CatSerializer,
+            DogSerializer,
+        )
     ```
 
-    The `polymorphic_mapping` property is a dict containing
-    the actual resource type string & serializer value which
-    acts as a lookup table.
+    The `polymorphic_serializers` property is an iterable
+    containing all of the serializers that may be backing
+    the instances & data.
+
+    Implementation Details
+    ~~~~~~~~~~~~~~~~~~~~~~
+
+    The approach is similar to DRF's ListSerializer where
+    native serializer methods are "proxied" to the underlying
+    serializer.
+
+    That means this should override every method or property
+    the ListSerializer calls against the `child` attribute.
     """
 
-    def __new__(cls, *args, **kwargs):
-        """ DRF serializers override this too
+    def __init__(self, *args, **kwargs):
+        """ Ensure the required properties are present """
 
-        DRF passes in a single instance or a queryset as arg[0]
-        and/or a data dict submitted by the requestor which is
-        kwarg['data'].
+        super().__init__(*args, **kwargs)
+        instance_field = self.get_polymorphic_instance_field()
+        serializers = self.polymorphic_serializers
 
-        If we have data then always use it's type cause the
-        requestor could be updating from one resource type to
-        another. Otherwise fallback on the value of the models
-        `polymorphic_model_field` value.
+        if not instance_field:
+            msg = 'Using "%s" requires a "polymorphic_instance_field" ' \
+                  'property on the JsonApiMeta object'
+            raise ImproperlyConfigured(msg % self.__name__)
+
+        if not serializers or not isinstance(serializers, (list, tuple)):
+            msg = 'Using "%s" requires a "polymorphic_serializers" ' \
+                  'field which must be a dict on the JsonApiMeta object'
+            raise ImproperlyConfigured(msg % self.__name__)
+
+    @cached_property
+    def polymorphic_serializers(self):
+        """ Cached serializer instances of all backend serializer """
+
+        return self.get_polymorphic_serializers()
+
+    def get_polymorphic_instance_field(self):
+        """ Return the string instance field name """
+
+        meta = getattr(self, 'JsonApiMeta', None)
+        return getattr(meta, 'polymorphic_instance_field', None)
+
+    def get_polymorphic_serializers(self):
+        """ Initialize all the backing serializers & return them """
+
+        meta = getattr(self, 'JsonApiMeta', None)
+        serializers = getattr(meta, 'polymorphic_serializers', ())
+        return [s(context=self.context) for s in serializers]
+
+    def get_polymorphic_serializer(self, item):
+        """ Given an instance or dict find the right serializer
+
+        Always presume it's a dict first since the caller
+        could be changing the type in an update. Fallback
+        to looking at the instance last.
         """
 
-        meta = getattr(cls, 'JsonApiMeta', None)
-        model_field = getattr(meta, 'polymorphic_model_field', None)
-        mapping = getattr(meta, 'polymorphic_mapping', {})
+        instance_field = self.get_polymorphic_instance_field()
+        try:
+            rtype = item.get('type', item.get(instance_field))
+        except AttributeError:
+            rtype = getattr(item, instance_field)
+        for serializer in self.polymorphic_serializers:
+            if serializer.get_rtype() == rtype:
+                return serializer
 
-        if not model_field:
-            msg = 'Using "%s" requires a "polymorphic_model_field" ' \
-                  'property on the JsonApiMeta object'
-            raise ImproperlyConfigured(msg % cls.__name__)
+    def create(self, validated_data):
+        """ DRF override, no type key present instead use instance_field """
 
-        if not mapping or not isinstance(mapping, dict):
-            msg = 'Using "%s" requires a "polymorphic_mapping" ' \
-                  'field which must be a dict on the JsonApiMeta object'
-            raise ImproperlyConfigured(msg % cls.__name__)
+        serializer = self.get_polymorphic_serializer(validated_data)
+        return serializer.create(validated_data)
 
-        if kwargs.get('many'):
-            return super().__new__(cls, *args, **kwargs)
-        elif kwargs.get('data'):
-            rtype = kwargs['data'].get('type')
-        elif args and hasattr(args[0], model_field):
-            rtype = getattr(args[0], model_field, None)
-        else:
-            return super().__new__(cls, *args, **kwargs)
+    def update(self, instance, validated_data):
+        """ DRF override, no type key present instead use instance_field """
 
-        serializer = cls.get_polymorphic_serializer(mapping, rtype)
-        return serializer(*args, **kwargs)
+        serializer = self.get_polymorphic_serializer(validated_data)
+        return serializer.update(instance, validated_data)
 
-    @staticmethod
-    def get_polymorphic_serializer(mapping, rtype):
-        """ Find the serializer via rtype in the mapping """
+    def run_validation(self, data):
+        """ DRF override, use the type key """
 
-        serializer = mapping.get(rtype)
-        if not serializer:
-            str_rtypes = ', '.join(mapping.keys())
-            raise RtypeConflict(given=rtype, rtype=str_rtypes)
-        return serializer
+        serializer = self.get_polymorphic_serializer(data)
+        return serializer.run_validation(data)
 
+    def to_representation(self, data):
+        """ DRF override, use the instance_field on the instance """
 
-class ChildProxy:
-    def __init__(self, list_serializer):
-        self.list_serializer = list_serializer
-
-    def __getattr__(self, name):
-        if hasattr(self, name):
-            return super().__getattr__(name)
-        else:
-            self.func_name = name
-            return self
-
-    def __call__(self, item):
-        # item could be a models instance or data dict
-        #rtype = getattr(item, <field name>, item.get('type'))
-
-        # loop through children & find the right one
-        for child in self.children:
-            pass
-        return 'XXX HERE', self.func_name, p, kw
-
-
-class PolymorphicListSerializer(serializers.ListSerializer):
-    # child won't be the PolymorphicModelSerializer which because
-    # init calls instantiates the serializer again & since no
-    # `many` cause this init pops it off then it will be one of
-    # that actual serializers.
-    #
-    # that's not good
-
-    #def __init__(self, *args, **kwargs):
-    #    self.children = kwargs.pop('children')
-    #    super().__init__(*args, **kwargs)
-    #    for child in self.children:
-    #        child.bind(field_name='', parent=self)
-
-    #def __init__(self, *args, **kwargs):
-    #    super().__init__(*args, **kwargs)
-    #    self._child = self.child
-    #    self.child = ChildProxy(list_serializer=self)
-    pass
+        serializer = self.get_polymorphic_serializer(data)
+        return serializer.to_representation(data)
