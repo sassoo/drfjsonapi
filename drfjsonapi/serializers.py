@@ -65,7 +65,7 @@ class JsonApiSerializer(serializers.Serializer):
                 k: v for k, v in self.related_fields.items()
                 if k in self.JsonApiMeta.includable_fields
             }
-        except AttributeError:
+        except (AttributeError, TypeError):
             return {}
 
     def get_include_default_fields(self):
@@ -324,9 +324,9 @@ class PolymorphicSerializer(JsonApiSerializer):
 
     To use this each instance, typically a Django model,
     must have a designated field with a value that can be
-    relied upon for distringuishing which serializer to use.
-    The value MUST also be the JSON API "resource type" also
-    known as rtype for the underlying instance.
+    relied upon for distinguishing which serializer to use.
+    The value MUST be the JSON API "resource type", also
+    known as, rtype for the underlying instance.
 
     The instance field is specified by a `polymorphic_instance_field`
     property on the JsonApiMeta object:
