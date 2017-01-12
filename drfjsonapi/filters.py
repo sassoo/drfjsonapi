@@ -280,7 +280,7 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
     one from the fields `get_filtered_queryset` method.
 
     Finally, if no includes are provided in the query param
-    then any fields returned from `get_default_include_fields`
+    then any fields returned from `get_include_default_fields`
     on serializers will be automatically prefeteched & included.
     """
 
@@ -366,7 +366,7 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
         where desired.
         """
 
-        for name, field in serializer.get_default_include_fields().items():
+        for name, field in serializer.get_include_default_fields().items():
             self._update_cache(name, field)
 
     def validate_includes(self, includes, serializer):

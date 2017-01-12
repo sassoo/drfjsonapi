@@ -57,7 +57,18 @@ class JsonApiSerializer(serializers.Serializer):
         except AttributeError:
             return {}
 
-    def get_default_include_fields(self):
+    def get_includable_fields(self):
+        """ Return includable related fields """
+
+        try:
+            return {
+                k: v for k, v in self.related_fields.items()
+                if k in self.JsonApiMeta.includable_fields
+            }
+        except AttributeError:
+            return {}
+
+    def get_include_default_fields(self):
         """ Return the default related fields to include
 
         This is only used if the requestor did not explicitly
@@ -66,18 +77,10 @@ class JsonApiSerializer(serializers.Serializer):
 
         try:
             return {
-                k: v for k, v in self.get_includable_fields.items()
-                if k in self.JsonApiMeta.default_include_fields
+                k: v for k, v in self.get_includable_fields().items()
+                if k in self.JsonApiMeta.include_default_fields
             }
         except (AttributeError, TypeError):
-            return {}
-
-    def get_includable_fields(self):
-        """ Return includable related fields """
-
-        try:
-            return self.JsonApiMeta.includable_fields
-        except AttributeError:
             return {}
 
     def get_links(self, instance):
