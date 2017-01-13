@@ -57,32 +57,6 @@ class JsonApiSerializer(serializers.Serializer):
         except AttributeError:
             return {}
 
-    def get_includable_fields(self):
-        """ Return includable related fields """
-
-        try:
-            return {
-                k: v for k, v in self.related_fields.items()
-                if k in self.JsonApiMeta.includable_fields
-            }
-        except (AttributeError, TypeError):
-            return {}
-
-    def get_include_default_fields(self):
-        """ Return the default related fields to include
-
-        This is only used if the requestor did not explicitly
-        request includes per the JSON API spec.
-        """
-
-        try:
-            return {
-                k: v for k, v in self.get_includable_fields().items()
-                if k in self.JsonApiMeta.include_default_fields
-            }
-        except (AttributeError, TypeError):
-            return {}
-
     def get_links(self, instance):
         """ Return the "Links" object for an individual resource
 
@@ -248,7 +222,7 @@ class JsonApiSerializer(serializers.Serializer):
         """
 
         try:
-            sparse = self.context['request']._sparse_cache
+            sparse = self.context['sparse']
             fields = sparse[self.get_rtype()]
         except (AttributeError, KeyError):
             return

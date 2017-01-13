@@ -5,7 +5,9 @@
     DRF renderer that is compliant with the JSON API spec
 """
 
-from collections import Iterable, OrderedDict
+import itertools
+
+from collections import OrderedDict
 from rest_framework.renderers import JSONRenderer
 from .utils import _get_related_field
 
@@ -29,7 +31,7 @@ class JsonApiRenderer(JSONRenderer):
         return data
 
     # pylint: disable=too-many-arguments
-    def _get_include(self, field_name, cache, context, models, ret):
+    def _get_include(self, include_cache, models, ret):
         """ Given a cache dict & models serialize them
 
         This is a self-referential walking of the cache tree
@@ -39,36 +41,28 @@ class JsonApiRenderer(JSONRenderer):
 
         It does not return anything & instead has mutation
         side-effects of the inclusion array `ret`.
-
-        WARN: this is probably computationally expensive
-              in several way. By dupe checking & by creating
-              a fresh serializer for each model.
-
-              Fresh serializers are used just in case fields
-              are dynamically altered on a per model basis.
         """
 
-        field = cache['field']
-
+        # include_cache_level is 'serializers', 'fieldname', 'fieldname': {'serializer', 'prefetch', 'fieldname', 'fieldname', 'fieldname'}
+        include_fields = [f for f in include_cache_level.keys() if f not in ('prefetch', 'serializer')]
         for model in models:
-            related = _get_related_field(model, field_name)
-            if not related:
-                continue
-            elif not isinstance(related, Iterable):
-                related = [related]
+            for field in include_fields:
+                related = _get_related_field(model, field)
+                if not related:
+                    continue
 
-            for _model in related:
-                context['include'] = cache.keys()
-                data = field.get_serializer(_model, context=context).data
-                # no dupes
-                if data not in ret:
-                    ret.append(data)
+                for _model in related:
+                    serializer = include_cache[field]['serializer']
+                    serializer.context['include'] = include_fields
+                    data = serializer.to_representation(_model)
+                    # no dupes
+                    if data not in ret:
+                        ret.append(data)
 
-            for key, val in cache.items():
-                if key != 'field':
-                    self._get_include(key, val, context, related, ret)
+            for field in include_fields:
+                self._get_include(include_cache_level[field], related, ret)
 
-    def get_included(self, resources, serializer, request):
+    def get_included(self, resources, request):
         """ Return the top level "Included Resources" array
 
         This should return a list that is compliant with the
@@ -91,7 +85,7 @@ class JsonApiRenderer(JSONRenderer):
 
         # could be single model or many or serializer is None
         # if single then coerce into list
-        models = getattr(serializer, 'instance', None)
+        models = getattr(resources.serializer, 'instance', None)
         if models and not isinstance(models, list):
             models = [models]
 
@@ -103,8 +97,8 @@ class JsonApiRenderer(JSONRenderer):
             resources = [resources]
 
         ret = []
-        for key, val in request._includes.items():
-            self._get_include(key, val, serializer.context, models, ret)
+        for model in models:
+            self._get_include(request._includes, model, ret)
 
         # remove dupes from primary data
         return [data for data in ret if data not in resources]
@@ -145,7 +139,7 @@ class JsonApiRenderer(JSONRenderer):
 
         return pager.get('meta', {})
 
-    def get_top_level(self, data, request, pager, serializer=None):
+    def get_top_level(self, data, request, pager):
         """ Return the "Top Level" object of the resource(s)
 
         This should return a dict that is compliant with the
@@ -157,7 +151,7 @@ class JsonApiRenderer(JSONRenderer):
 
         return {
             'data': data,
-            'included': self.get_included(data, serializer, request),
+            'included': self.get_included(data, request),
             'jsonapi': self.get_jsonapi(),
             'links': self.get_links(request, pager),
             'meta': self.get_meta(pager),
@@ -188,10 +182,7 @@ class JsonApiRenderer(JSONRenderer):
         elif 'errors' in data:
             data = self.get_errors(data)
         else:
-            serializer = data.serializer
-            if isinstance(data, list):
-                serializer = serializer.child
-            data = self.get_top_level(data, request, pager, serializer)
+            data = self.get_top_level(data, request, pager)
 
         return super(JsonApiRenderer, self).render(
             data,

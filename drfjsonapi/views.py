@@ -116,7 +116,7 @@ def page_not_found():
     raise RouteNotFound()
 
 
-class JsonApiViewMixin(object):
+class JsonApiViewMixin:
     """ DRF view mixin for the JSON API
 
     This mixin should be used in any view that wants to
@@ -142,18 +142,30 @@ class JsonApiViewMixin(object):
         view.check_permissions(self.request)
         return view
 
+    def get_filterset(self):
+        """ Return a policy instance from the `policy_class` property """
+
+        assert getattr(self, 'filterset_class', None) is not None, (
+            '"%s" should either include a `filterset_class` attribute, '
+            'or override the `get_filterset()` method.'
+            % self.__class__.__name__
+        )
+        # pylint: disable=not-callable
+        return self.filterset_class(context=self.get_serializer_context())
+
     def get_serializer_context(self):
         """ Let the serializer know which related fields to include """
 
-        context = super(JsonApiViewMixin, self).get_serializer_context()
+        context = super().get_serializer_context()
         context['includes'] = getattr(self.request, '_includes', {}).keys()
+        context['sparse'] = getattr(self.request, '_sparse', {})
         return context
 
     def initialize_request(self, request, *args, **kwargs):
         """ Perform some spec compliance checks as early as possible """
 
         filters = self.filter_backends
-        request = super(JsonApiViewMixin, self).initialize_request(
+        request = super().initialize_request(
             request, *args, **kwargs
         )
 

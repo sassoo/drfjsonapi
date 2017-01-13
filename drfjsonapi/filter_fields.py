@@ -89,6 +89,7 @@ class IntegerFilterField(FilterField):
 class RelatedFilterField(object):
     """ Used for filters referencing a relationship field """
 
+    # XXX this means isnull should work & w  ithout a related filterset it's the only filter that works. removals__isnull b  ut not removals__species__exact
     def validate(self, *args, **kwargs):
         """ Ignore on RelatedFiltFields
 

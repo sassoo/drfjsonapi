@@ -11,7 +11,6 @@ import re
 
 from collections import OrderedDict
 from django.core.exceptions import ImproperlyConfigured
-from django.db.models.query import Prefetch
 from rest_framework.exceptions import ValidationError
 from rest_framework.filters import (
     BaseFilterBackend,
@@ -296,19 +295,19 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
         """ DRF entry point into the custom FilterBackend """
 
         try:
-            serializer = view.get_serializer()
-            if not serializer:
+            filterset = view.get_filterset()
+            if not filterset:
                 raise AttributeError
         except AttributeError:
-            msg = 'Using "%s" requires a view that returns a serializer ' \
-                  'from "get_serializer()"'
+            msg = 'Using "%s" requires a view that returns a filterset ' \
+                  'from "get_filterset()"'
             raise ImproperlyConfigured(msg % self.__class__.__name__)
 
-        includes = self.get_query_includes(request)
+        includes = self.get_query_includes(request, filterset)
         if includes:
-            self.validate_includes(includes, serializer)
+            self.validate_includes(includes, filterset)
         else:
-            self.process_default_includes(serializer)
+            self.process_default_includes(filterset)
 
         queryset = queryset.prefetch_related(*self.get_prefetches())
         request._includes = self._get_cache()
@@ -323,10 +322,13 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
             _dict_merge(cache, _dict)
         return cache
 
-    def _update_cache(self, path, field):
+    def _update_cache(self, field, filterset, path=None):
         """ Add an entry to the include_cache """
 
-        self._cache[path] = {'field': field}
+        path = path or field
+        prefetch = filterset.get_includable_prefetch(path, field)
+        serializer = filterset.get_includable_serializer(field)
+        self._cache[path] = {'prefetch': prefetch, 'serializer': serializer}
 
     def get_prefetches(self):
         """ Return the list of generated Prefetch objects
@@ -336,13 +338,9 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
         `get_filtered_queryset` method for extra filtering.
         """
 
-        prefetches = []
-        for field, value in self._cache.items():
-            queryset = value['field'].get_filtered_queryset()
-            prefetches.append(Prefetch(field, queryset=queryset))
-        return prefetches
+        return [value['prefetch'] for field, value in self._cache.items()]
 
-    def get_query_includes(self, request):
+    def get_query_includes(self, request, filterset):
         """ Return the sanitized `include` query parameters
 
         Handles comma separated & multiple include params &
@@ -351,10 +349,11 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
 
         includes = request.query_params.getlist('include')
         includes = [include.split(',') for include in includes]
+        includes = [filterset.remap_field(include) for include in includes]
         includes = list(itertools.chain(*includes))
         return tuple(set(includes))
 
-    def process_default_includes(self, serializer):
+    def process_default_includes(self, filterset):
         """ Include all of the default fields
 
         This should look for related fields with default
@@ -366,10 +365,10 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
         where desired.
         """
 
-        for name, field in serializer.get_include_default_fields().items():
-            self._update_cache(name, field)
+        for field in filterset.get_includable_default_fields():
+            self._update_cache(field, filterset)
 
-    def validate_includes(self, includes, serializer):
+    def validate_includes(self, includes, filterset):
         """ Validate all the sanitized includeed query parameters """
 
         if len(includes) > self.max_includes:
@@ -379,9 +378,9 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
             raise InvalidIncludeParam(msg)
 
         for include in includes:
-            self.validate_include(include, serializer)
+            self.validate_include(include, filterset)
 
-    def validate_include(self, include, serializer):
+    def validate_include(self, include, filterset):
         """ Validate each includeed query param individually
 
         Walk the serializers for deeply nested include requests
@@ -395,17 +394,16 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
             raise InvalidIncludeParam(msg)
 
         for idx, relation in enumerate(relations):
-            field = serializer.get_includable_fields().get(relation)
             related_path = '__'.join(relations[:idx + 1])
 
-            if not field:
+            if not filterset.is_includable(relation):
                 msg = 'The "%s" include query parameter requested is ' \
                       'either an invalid field or not allowed to be ' \
                       'included' % include
                 raise InvalidIncludeParam(msg)
 
-            self._update_cache(related_path, field)
-            serializer = field.get_serializer()
+            self._update_cache(relation, filterset, related_path)
+            filterset = filterset.get_related_filterset(relation)
 
 
 class OrderingFilter(JsonApiFilter, _OrderingFilter):
@@ -516,7 +514,7 @@ class SparseFilter(JsonApiFilter, BaseFilterBackend):
         """ DRF entry point into the custom FilterBackend """
 
         sparse_fields = self.get_sparse_fields(request)
-        request._sparse_cache = sparse_fields
+        request._sparse = sparse_fields
         return queryset
 
     def get_sparse_fields(self, request):
