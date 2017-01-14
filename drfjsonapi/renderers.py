@@ -5,9 +5,7 @@
     DRF renderer that is compliant with the JSON API spec
 """
 
-import itertools
-
-from collections import OrderedDict
+from collections import Iterable, OrderedDict
 from rest_framework.renderers import JSONRenderer
 from .utils import _get_related_field
 
@@ -31,36 +29,43 @@ class JsonApiRenderer(JSONRenderer):
         return data
 
     # pylint: disable=too-many-arguments
-    def _get_include(self, include_cache, models, ret):
-        """ Given a cache dict & models serialize them
+    def _get_include(self, fields, model, include_table):
+        """ Populate the included table for future processing
 
         This is a self-referential walking of the cache tree
-        that was created by the `IncludeFilter`. It ensures
-        no dupes exist within the compound documents array
-        but doesn't do anything with the primary data.
+        that was created by the `IncludeFilter`. It will add
+        each model by serializer type & primary key to the
+        include table so no dupes are present.
 
         It does not return anything & instead has mutation
-        side-effects of the inclusion array `ret`.
+        side-effects of the include table.
+
+        NOTE: the serializer for each included model needs
+              to know which fields will be included so
+              proper data linkage can occur.
+
+              This is done via the context
         """
 
-        # include_cache_level is 'serializers', 'fieldname', 'fieldname': {'serializer', 'prefetch', 'fieldname', 'fieldname', 'fieldname'}
-        include_fields = [f for f in include_cache_level.keys() if f not in ('prefetch', 'serializer')]
-        for model in models:
-            for field in include_fields:
-                related = _get_related_field(model, field)
-                if not related:
-                    continue
+        include_fields = [f for f in fields.keys() if f != 'serializer']
+        for field in include_fields:
+            relations = _get_related_field(model, field)
+            if not relations:
+                continue
+            elif not isinstance(relations, Iterable):
+                relations = [relations]
 
-                for _model in related:
-                    serializer = include_cache[field]['serializer']
-                    serializer.context['include'] = include_fields
-                    data = serializer.to_representation(_model)
-                    # no dupes
-                    if data not in ret:
-                        ret.append(data)
-
-            for field in include_fields:
-                self._get_include(include_cache_level[field], related, ret)
+            for relation in relations:
+                relation_fields = [
+                    f for f in fields[field].keys()
+                    if f != 'serializer'
+                ]
+                serializer = fields[field]['serializer']
+                rtype = serializer.get_rtype()
+                include_table['%s_%s' % (relation.pk, rtype)] = (
+                    relation, serializer, relation_fields
+                )
+                self._get_include(fields[field], relation, include_table)
 
     def get_included(self, resources, request):
         """ Return the top level "Included Resources" array
@@ -78,9 +83,6 @@ class JsonApiRenderer(JSONRenderer):
 
         TIP: read the documentation of the `IncludeFilter`
              class for more information.
-
-        :spec:
-            jsonapi.org/format/#document-resource-objects
         """
 
         # could be single model or many or serializer is None
@@ -96,12 +98,19 @@ class JsonApiRenderer(JSONRenderer):
         elif resources and not isinstance(resources, list):
             resources = [resources]
 
-        ret = []
+        primary_table = {'%s_%s' % (r['id'], r['type']): r for r in resources}
+        include_table = {}
         for model in models:
-            self._get_include(request._includes, model, ret)
+            self._get_include(request._includes, model, include_table)
 
-        # remove dupes from primary data
-        return [data for data in ret if data not in resources]
+        # serialize everything in included not in primary data
+        included = []
+        for key, val in include_table.items():
+            if key not in primary_table:
+                model, serializer, fields = val
+                serializer.context['includes'] = fields
+                included.append(serializer.to_representation(model))
+        return included
 
     def get_jsonapi(self):
         """ Return the top level "JSON API" object

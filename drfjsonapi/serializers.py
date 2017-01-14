@@ -42,21 +42,6 @@ class JsonApiSerializer(serializers.Serializer):
                 fields[name] = field
         return fields
 
-    def get_filterable_fields(self):
-        """ Return a dict of fields allowed to be filtered on
-
-        By default the `JsonApiMeta.filterable_fields` property
-        is used to source the items.
-
-        The key of each item is the string name of the field &
-        the value is the `FilterField` object instance.
-        """
-
-        try:
-            return self.JsonApiMeta.filterable_fields
-        except AttributeError:
-            return {}
-
     def get_links(self, instance):
         """ Return the "Links" object for an individual resource
 
@@ -85,7 +70,7 @@ class JsonApiSerializer(serializers.Serializer):
 
         return {}
 
-    def get_relationships(self, data):
+    def get_relationships(self, data=None, instance=None):
         """ Return the "Relationships Object" for a resource
 
         This should return a dict that is compliant with the
@@ -100,33 +85,30 @@ class JsonApiSerializer(serializers.Serializer):
         Often to-one relationships will have linkage=True while
         to-many's won't since there could be alot of them.
 
-        NOTE: if the field is included then we don't worry
-              about it here because the IncludesFilter will
-              process all those defaults & populate the context's
-              `includes` keys.
-
         :spec:
             jsonapi.org/format/#document-resource-object-relationships
         """
 
+        includes = self.context.get('includes', {})
         relationships = {}
         for key, field in self.related_fields.items():
-            relationships[key] = {
-                'data': data.pop(key),
-                'links': field.get_links(data['id']),
-                'meta': field.get_meta(),
-            }
-
-            includes = self.context.get('includes', {})
-            if not any((field.linkage, key in includes)):
-                del relationships[key]['data']
-
+            if instance and not field.linkage and key not in includes:
+                del self.fields[key]
+                relationships[key] = {
+                    'links': field.get_links(instance.pk),
+                    'meta': field.get_meta(),
+                }
+            elif data:
+                relationships[key] = {
+                    'data': data.pop(key),
+                    'links': field.get_links(data['id']),
+                    'meta': field.get_meta(),
+                }
         return relationships
 
     def get_rtype(self):
         """ Return the string resource type as referenced by JSON API """
 
-        # pylint: disable=no-member
         meta = getattr(self, 'JsonApiMeta', None)
         rtype = getattr(meta, 'rtype', None)
         if not rtype:
@@ -139,7 +121,7 @@ class JsonApiSerializer(serializers.Serializer):
         """ DRF override for error handling """
 
         try:
-            return super(JsonApiSerializer, self).is_valid(**kwargs)
+            return super().is_valid(**kwargs)
         except exceptions.ValidationError as exc:
             self.process_validation_errors(exc)
 
@@ -210,7 +192,7 @@ class JsonApiSerializer(serializers.Serializer):
             raise RtypeConflict(given=data['type'], rtype=self.get_rtype())
 
         try:
-            return super(JsonApiSerializer, self).to_internal_value(data)
+            return super().to_internal_value(data)
         except exceptions.ValidationError as exc:
             self.process_validation_errors(exc)
 
@@ -244,13 +226,16 @@ class JsonApiSerializer(serializers.Serializer):
 
         self.to_representation_sparse()
 
-        print('related query still occurs even if linkage=False included')
-        data = super(JsonApiSerializer, self).to_representation(instance)
+        # avoid db queries for unwanted fields
+        relationships = self.get_relationships(instance=instance)
+        data = super().to_representation(instance)
+        relationships.update(self.get_relationships(data=data))
+
         return {
             'attributes': data,
             'links': self.get_links(instance),
             'meta': self.get_meta(),
-            'relationships': self.get_relationships(data),
+            'relationships': relationships,
             'type': self.get_rtype(),
             'id': data.pop('id'),
         }

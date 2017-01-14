@@ -6,7 +6,6 @@
     compliant API.
 """
 
-from django.utils.module_loading import import_string
 from django.utils.translation import ugettext_lazy as _
 from rest_framework.relations import (
     ManyRelatedField,
@@ -44,23 +43,16 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
 
     linkage = True
     related_view = None
-    serializer = None
+    rtype = None
 
     def __init__(self, **kwargs):
         """ Process our custom attrs so DRF doesn't barf """
 
-        attrs = ('linkage', 'related_view', 'serializer')
+        attrs = ('linkage', 'related_view', 'rtype')
         for attr in attrs:
             val = kwargs.pop(attr, getattr(self, attr))
             setattr(self, attr, val)
-
-        super(ResourceRelatedField, self).__init__(**kwargs)
-
-    @property
-    def rtype(self):
-        """ """
-
-        return self.get_serializer().get_rtype()
+        super().__init__(**kwargs)
 
     def get_data(self, rid):
         """ Return the relationships "Resource Linkage" object
@@ -100,21 +92,6 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
 
         url = _get_resource_url(self.rtype, rid, self.context)
         return {'self': url}
-
-    def get_filtered_queryset(self):
-        """ Override to use a filtered queyset
-
-        DRF doesn't have a built-in method for passing or
-        providing filters for related fields on a serializer.
-        There are tickets about it & it's left to the app
-        developers currently.
-
-        This method will be called by the view filters to
-        hopefully settle on a meaningful convention. The
-        queryset will be used in prefetches & filters.
-        """
-
-        return None
 
     def get_links(self, parent_rid):
         """ Return the relationships "Links" object
@@ -185,19 +162,6 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
             )
         return view
 
-    def get_serializer(self, *args, **kwargs):
-        """ Return a serializer instance for the related field
-
-        If a context isn't passed then use the existing one so
-        the serializer is init'd with the request & what not.
-        """
-
-        try:
-            kwargs['context'] = kwargs.pop('context', self.context)
-            return import_string(self.serializer)(*args, **kwargs)
-        except ImportError:
-            return None
-
     def to_internal_value(self, data):
         """ Override DRF PrimaryKeyRelatedField `to_internal_value`
 
@@ -224,13 +188,12 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
                 self.fail('rtype_conflict', given=rtype, rtype=self.rtype)
         except (KeyError, TypeError):
             rid = None
-
-        return super(ResourceRelatedField, self).to_internal_value(rid)
+        return super().to_internal_value(rid)
 
     def to_representation(self, value):
         """ Override DRF PrimaryKeyRelatedField `to_representation` """
 
-        rid = super(ResourceRelatedField, self).to_representation(value)
+        rid = super().to_representation(value)
         return self.get_data(rid)
 
 
@@ -250,7 +213,7 @@ class ManyResourceRelatedField(ResourceRelatedField):
     def __init__(self, **kwargs):
 
         del kwargs['_many_invoked']
-        super(ManyResourceRelatedField, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
     def __new__(cls, *args, **kwargs):
 
@@ -260,5 +223,4 @@ class ManyResourceRelatedField(ResourceRelatedField):
         if '_many_invoked' not in kwargs:
             kwargs['_many_invoked'] = True
             return cls.many_init(*args, **kwargs)
-        return super(ManyResourceRelatedField, cls).__new__(cls, *args,
-                                                            **kwargs)
+        return super().__new__(cls, *args, **kwargs)
