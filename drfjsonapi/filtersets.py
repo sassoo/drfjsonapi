@@ -2,7 +2,18 @@
     drfjsonapi.filtersets
     ~~~~~~~~~~~~~~~~~~~~~
 
-    XXX
+    Interface for handling JSON API query parameters like
+    include & filter.
+
+    A filterset is an API around all of the complexities
+    of inclusions & filters including query generation &
+    nested relationship handling.
+
+    Rather than doing some naive like allowing every single
+    relationship be included, every single field filtered
+    upon, or even worse always using `.all()` on your
+    relationship querysets like DRF wants to do - this
+    interface gives you total flexbility.
 """
 
 from django.db.models import Prefetch
@@ -10,23 +21,7 @@ from django.utils.module_loading import import_string
 
 
 class BaseFilterSet:
-    """
-    HOW TO LINK FILTERSETS?!?!?!?
-    # Filters
-    #
-    # [SERIALIZER] get the FilterValidator for the field
-    # [FILTER BE] validate it
-    # [SERIALIZER] get the filter expression for the field
-    # [RELATED] if not found serializer will get it from relationship
-    # [FILTER BE] update queryset with filters
-
-    # Includes
-    #
-    # [FILTER_BE -> FILTERSET] call remap_field (remap qp)
-    # [FILTER_BE -> FILTERSET] check if the field is includable
-    # [FILTER_BE -> FILTERSET] get the include prefetch for the field
-    # [FILTER_BE] update queryset with prefetchers
-    """
+    """ This should be subclassed by your custom FilterSet's """
 
     filterable_fields = {}
     includable_fields = {}
@@ -34,22 +29,22 @@ class BaseFilterSet:
     related_filterset_fields = {}
 
     def __init__(self, context=None):
-        """ XXX """
+        """ Context will include the request & view """
 
         self.context = context or {}
 
     def remap_field(self, field):
-        """ Must return field """
+        """ Must return field - XXX NOT WORKING """
 
         return field
 
     def is_filterable(self, field):
-        """ XXX """
+        """ Bool check to see if the field by name is filterable """
 
         return bool(self.get_filter_validator(field))
 
     def get_filter_validator(self, field):
-        """ XXX """
+        """ Return the fields filter validators """
 
         try:
             return self.filterable_fields[field]
@@ -57,27 +52,27 @@ class BaseFilterSet:
             return None
 
     def get_filter_expression(self, query_param, field):
-        """ XXX """
+        """ Return any valid django filter expression for the field """
 
         return None
 
     def is_includable(self, field):
-        """ XXX """
+        """ Bool check to see if the field by name is includable """
 
         return bool(self.get_includable_serializer(field))
 
     def get_includable_default_fields(self):
-        """ XXX """
+        """ Return an array of fields to be included by default """
 
         return self.includable_default_fields
 
     def get_includable_prefetch(self, query_param, field):
-        """ XXX """
+        """ Return any valid Prefetch expression for the field """
 
         return Prefetch(query_param)
 
     def get_includable_serializer(self, field):
-        """ XXX """
+        """ Return the serializer instance for the included field """
 
         try:
             serializer_path = self.includable_fields[field]
@@ -87,7 +82,11 @@ class BaseFilterSet:
             return None
 
     def get_related_filterset(self, field):
-        """ XXX """
+        """ Return the filterset instance for the related field
+
+        This is necessary for validating filter & include params
+        that span relationships.
+        """
 
         try:
             filterset_path = self.related_filterset_fields[field]
