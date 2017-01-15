@@ -175,10 +175,11 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
             raise InvalidFilterParam(msg)
 
         for idx, relation in enumerate(relations):
+            coerced_value = None
             related_path = '__'.join(relations[:idx + 1])
             try:
                 validator = serializer.get_filterable_validator(relation)
-                value = validator.validate(lookup, value)
+                coerced_value = validator.validate(lookup, value)
             except (AttributeError, KeyError):
                 msg = 'The "%s" filter query parameter is invalid, the ' \
                       '"%s" field either does not exist on the requested ' \
@@ -191,8 +192,8 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
                       '%s' % (param, ' '.join(exc.detail))
                 raise InvalidFilterParam(msg)
 
-            if value:
-                self.update_filter(related_path, lookup, value)
+            if coerced_value:
+                self.update_filter(related_path, lookup, coerced_value)
             elif isinstance(validator, RelatedFilterField):
                 self.update_related_filter(related_path, relation, serializer)
                 serializer = serializer.get_related_serializer(relation)
