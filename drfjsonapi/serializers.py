@@ -24,8 +24,72 @@ from .relations import ResourceRelatedField
 from .utils import _get_resource_url
 
 
+class QueryParamMixin:
+    """ Helpers for handling include & filter query params
+
+    This supports maximum flexibility by relying on the
+    relationship fields for included related directives
+    so they can be encapsulated & reused while also
+    allowing serializers to override if needed.
+
+    The FilterBackends never know anything about the
+    underlying relationship fields. Everything is
+    proxied through this simple serializer interface.
+    """
+
+    def get_filterable_validator(self, field):
+        """ Return a dict of fields allowed to be filtered on
+
+        By default the `JsonApiMeta.filterable_fields` property
+        is used to source the items.
+
+        The key of each item is the string name of the field &
+        the value is the `FilterField` object instance.
+        """
+
+        try:
+            return self.JsonApiMeta.filterable_fields[field]
+        except (AttributeError, KeyError):
+            return None
+
+    def get_includables(self):
+        """ Return includable related field names """
+
+        return [k for k, v in self.related_fields.items() if v.includable]
+
+    def get_default_includables(self):
+        """ Return the default related field names to include
+
+        This is only used if the requestor did not explicitly
+        request includes per the JSON API spec.
+        """
+
+        return [k for k, v in self.related_fields.items() if v.include]
+
+    def get_related_queryset(self, field):
+
+        try:
+            related_field = self.related_fields[field]
+            return related_field.get_filtered_queryset()
+        except (AttributeError, KeyError):
+            return None
+
+    def get_related_serializer(self, field):
+        """ Return the default related field names to include
+
+        This is only used if the requestor did not explicitly
+        request includes per the JSON API spec.
+        """
+
+        try:
+            related_field = self.related_fields[field]
+            return related_field.get_serializer(context=self.context)
+        except (AttributeError, KeyError):
+            return None
+
+
 # pylint: disable=abstract-method
-class JsonApiSerializer(serializers.Serializer):
+class JsonApiSerializer(QueryParamMixin, serializers.Serializer):
     """ JSON API Serializer """
 
     @property
@@ -214,7 +278,7 @@ class JsonApiSerializer(serializers.Serializer):
                 del self.fields[key]
 
     def to_representation(self, instance):
-        """ Return an individual "Resource Object" object
+        """ DRF override return an individual "Resource Object" object
 
         This should return a dict that is compliant with the
         "Resource Object" section of the JSON API spec. It

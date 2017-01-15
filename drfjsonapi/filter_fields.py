@@ -17,7 +17,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
 
-class FilterField(object):
+class FilterField:
     """ Base FilterField object used for declaring serializer filters
 
     A `FilterField` takes a DRF native serializer field
@@ -86,14 +86,18 @@ class IntegerFilterField(FilterField):
                'lt', 'lte', 'startswith')
 
 
-class RelatedFilterField(object):
+class RelatedFilterField(FilterField):
     """ Used for filters referencing a relationship field """
 
-    # XXX this means isnull should work & w  ithout a related filterset it's the only filter that works. removals__isnull b  ut not removals__species__exact
-    def validate(self, *args, **kwargs):
+    drf_field = serializers.BooleanField()
+    lookups = ('isnull',)
+
+    def validate(self, lookup, value):
         """ Ignore on RelatedFiltFields
 
         The validation will be performed on the relationships
-        ultimate field. This is just a hop along the path.
+        ultimate field if not in the lookups.
         """
-        pass
+
+        if lookup in self.lookups:
+            return super().validate(lookup, value)

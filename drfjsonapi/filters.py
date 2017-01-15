@@ -11,6 +11,7 @@ import re
 
 from collections import OrderedDict
 from django.core.exceptions import ImproperlyConfigured
+from django.db.models.query import Prefetch
 from rest_framework.exceptions import ValidationError
 from rest_framework.filters import (
     BaseFilterBackend,
@@ -36,21 +37,6 @@ class JsonApiFilter(object):
 class FieldFilter(JsonApiFilter, BaseFilterBackend):
     """ Support the filtering of arbitrary resource fields
 
-    JSON API details
-    ~~~~~~~~~~~~~~~~
-
-    This filter can be used to support the `filter` query param
-    for requesting arbitrary filtering strategies related to the
-    primary data requested according to the JSON API spec.
-
-    Per JSON API spec, it's agnostic about how filtering is done
-    but it does outline some examples which are adopted. Namely,
-    the filter query param brackets the field, optionally, with
-    dot notation relationships.
-
-    Implementation details
-    ~~~~~~~~~~~~~~~~~~~~~~
-
     The `filter_queryset` entry point method requires the view
     provided to have a `get_serializer` method which is already
     present on DRF GenericAPIView instances & it MUST return a
@@ -67,24 +53,22 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
            filters. For example, '?filter[foo.bar.baz.exact]=hi'
            would be 3 relations.
 
-        2. Exist as a key in the `get_filterable_fields` dict
-           when called on the serializer
+        2. Return a validator from the serializers validator
+           lookup method `get_filterable_validator`
 
         3. Related fields must use the RelatedFilterField.
            Also, related fields must return a serializer from
-           the fields `get_serializer` method (not the filter
-           field but the serializers field)
+           the serializers `get_related_serializer` method
 
-        4. Contain a valid lookup operator in the FilterFields
-           `lookups` attribute list.
+        4. Contain a valid lookup operator per the rules
+           of the validator returned in step 2.
 
-        5. Pass all validations on the FilerField
+        5. Pass all validations
 
     All vetted filters will have filter logic attached to the
     primary datasets queryset. You can also define an additional
-    mandatory default queryset for each FilterField object by
-    returning one from the serializer fields `get_filtered_queryset`
-    method.
+    mandatory default queryset for related fields by returning
+    one from the serializers `get_related_queryset` method.
     """
 
     max_filters = 10
@@ -118,10 +102,10 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
 
         self._filters['%s__%s' % (related_path, lookup)] = value
 
-    def update_related_filter(self, related_path, field):
+    def update_related_filter(self, related_path, relation, serializer):
         """ Generate & store an ORM based filter on the filter param """
 
-        queryset = field.get_filtered_queryset()
+        queryset = serializer.get_related_queryset(relation)
         if queryset is not None:
             self._filters['%s__in' % related_path] = queryset
 
@@ -193,8 +177,8 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
         for idx, relation in enumerate(relations):
             related_path = '__'.join(relations[:idx + 1])
             try:
-                filter_field = serializer.get_filterable_fields()[relation]
-                filter_field.validate(lookup, value)
+                validator = serializer.get_filterable_validator(relation)
+                value = validator.validate(lookup, value)
             except (AttributeError, KeyError):
                 msg = 'The "%s" filter query parameter is invalid, the ' \
                       '"%s" field either does not exist on the requested ' \
@@ -207,50 +191,21 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
                       '%s' % (param, ' '.join(exc.detail))
                 raise InvalidFilterParam(msg)
 
-            if isinstance(filter_field, RelatedFilterField):
-                field = serializer.fields[relation]
-                self.update_related_filter(related_path, field)
-                serializer = field.get_serializer()
-            else:
+            if value:
                 self.update_filter(related_path, lookup, value)
+            elif isinstance(validator, RelatedFilterField):
+                self.update_related_filter(related_path, relation, serializer)
+                serializer = serializer.get_related_serializer(relation)
 
 
 class IncludeFilter(JsonApiFilter, BaseFilterBackend):
     """ Support the include of compound documents
 
-    JSON API details
-    ~~~~~~~~~~~~~~~~
-
-    This filter can be used to support the `include` query param
-    for requesting additional compound documents related to the
-    primary data requested according to the JSON API spec.
-
-    This filter is JSON API compliant with the `include` query
-    parameter in the following mentionable ways:
-
-        1. The value of the include parameter MUST be a comma-separated
-           (U+002C COMMA, ",") list of relationship paths.
-
-        2. A relationship path is a dot-separated (U+002E FULL-STOP, ".")
-           list of relationship names.
-
-        3. If a server is unable to identify a relationship path
-           or does not support include of resources from a path,
-           it MUST respond with 400 Bad Request.
-
-    In addition to the above guidelines, this filter will handle
-    the scenario where multiple `include` query parameters are
-    specified in the query string. It will collect all of them &
-    uniquify them into a single tuple for validation checking.
-
-    Implementation details
-    ~~~~~~~~~~~~~~~~~~~~~~
-
     The `filter_queryset` entry point method requires the view
-    provided to have a `get_filterset` method & that MUST return
-    a FilterSet instance.
+    provided to have a `get_serializer` method & that MUST return
+    a serializer instance.
 
-    That filterset will be used to validate the `include` query
+    That serializer will be used to validate the `include` query
     param values. If the global `max_includes` property limit
     is not exceeded then each include is tested for eligibility.
 
@@ -261,25 +216,25 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
            includes. For example, '?include=foo.bar.baz'
            would be 3 relations.
 
-        2. Return true when passed to the filterset's
-           `is_includable()` method
+        2. Be listed in the serializers `get_includables`
+           or `get_default_includables` methods
 
-        3. Return a serializer when passed to the filterset's
-           `get_includable_serializer()` method.
+        3. Return a serializer when calling the serializers
+           `get_related_serializer` method.
 
     Each individual relation in an include will be validated
     according to steps 2-3. An include of 'actor.movies' for
     instance would have both 'actor' & 'movies' vetted against
-    steps 2-3 by walking the chain of related filtersets.
+    steps 2-3 by walking the chain of related serializers.
 
     All vetted includes will then have prefetching logic attached
     to the primary datasets queryset for efficiency. You can also
-    override the default Prefetch by returning one from the
-    filterset's `get_includable_prefetch()` method.
+    override the default Prefetch's queryset by returning one
+    from the serializers `get_related_queryset` method.
 
     Finally, if no includes are provided in the query param
-    then any fields returned from `get_includable_default_fields`
-    method on the filterset will be automatically prefeteched &
+    then any fields returned from the `get_default_includables`
+    method on the serializer will be automatically prefeteched &
     included.
     """
 
@@ -295,25 +250,25 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
         """ DRF entry point into the custom FilterBackend """
 
         try:
-            filterset = view.get_filterset()
-            if not filterset:
+            serializer = view.get_serializer()
+            if not serializer:
                 raise AttributeError
         except AttributeError:
-            msg = 'Using "%s" requires a view that returns a filterset ' \
-                  'from "get_filterset()"'
+            msg = 'Using "%s" requires a view that returns a ' \
+                  'serializer from "get_serializer()"'
             raise ImproperlyConfigured(msg % self.__class__.__name__)
 
-        includes = self.get_query_includes(request, filterset)
+        includes = self.get_query_includes(request)
         if includes:
-            self.validate_includes(includes, filterset)
+            self.validate_includes(includes, serializer)
         else:
-            self.process_default_includes(filterset)
+            self.process_default_includes(serializer)
 
         queryset = queryset.prefetch_related(*self.get_prefetches())
-        request._includes = self.get_cache()
+        request._includes = self._get_cache()
         return queryset
 
-    def get_cache(self):
+    def _get_cache(self):
         """ Generate a cache for later processing by the renderer """
 
         cache = {}
@@ -322,25 +277,27 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
             _dict_merge(cache, _dict)
         return cache
 
-    def update_cache(self, field, filterset, path=None):
-        """ Add an entry to the include_cache """
-
-        path = path or field
-        prefetch = filterset.get_includable_prefetch(path, field)
-        serializer = filterset.get_includable_serializer(field)
-        self._cache[path] = {'prefetch': prefetch, 'serializer': serializer}
-
-    def get_prefetches(self):
-        """ Return the list of generated Prefetch objects
+    def _update_cache(self, field, serializer, path=None):
+        """ Add an entry to the include_cache
 
         Order is important with django & that's why an
         OrderedDict is used. This will call the fields
-        `get_filtered_queryset` method for extra filtering.
+        `get_related_queryset` method for extra filtering.
         """
+
+        path = path or field
+        queryset = serializer.get_related_queryset(field)
+        self._cache[path] = {
+            'prefetch': Prefetch(path, queryset=queryset),
+            'serializer': serializer.get_related_serializer(field),
+        }
+
+    def get_prefetches(self):
+        """ Return the list of generated Prefetch objects """
 
         return [value.pop('prefetch') for value in self._cache.values()]
 
-    def get_query_includes(self, request, filterset):
+    def get_query_includes(self, request):
         """ Return the sanitized `include` query parameters
 
         Handles comma separated & multiple include params &
@@ -352,7 +309,7 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
         includes = list(itertools.chain(*includes))
         return tuple(set(includes))
 
-    def process_default_includes(self, filterset):
+    def process_default_includes(self, serializer):
         """ Include all of the default fields
 
         This should look for related fields with default
@@ -360,10 +317,10 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
         an include query parameter per the JSON API spec.
         """
 
-        for field in filterset.get_includable_default_fields():
-            self.update_cache(field, filterset)
+        for field in serializer.get_default_includables():
+            self._update_cache(field, serializer)
 
-    def validate_includes(self, includes, filterset):
+    def validate_includes(self, includes, serializer):
         """ Validate all the sanitized includeed query parameters """
 
         if len(includes) > self.max_includes:
@@ -373,12 +330,12 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
             raise InvalidIncludeParam(msg)
 
         for include in includes:
-            self.validate_include(include, filterset)
+            self.validate_include(include, serializer)
 
-    def validate_include(self, include, filterset):
-        """ Validate each includeed query param individually
+    def validate_include(self, include, serializer):
+        """ Validate each included query param individually
 
-        Walk the filtersets for deeply nested include requests
+        Walk the serializers for deeply nested include requests
         to ensure they are allowed to be includeed.
         """
 
@@ -391,14 +348,14 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
         for idx, relation in enumerate(relations):
             related_path = '__'.join(relations[:idx + 1])
 
-            if not filterset or not filterset.is_includable(relation):
+            if not serializer or relation not in serializer.get_includables():
                 msg = 'The "%s" include query parameter requested is ' \
                       'either an invalid field or not allowed to be ' \
                       'included' % include
                 raise InvalidIncludeParam(msg)
 
-            self.update_cache(relation, filterset, related_path)
-            filterset = filterset.get_related_filterset(relation)
+            self._update_cache(relation, serializer, related_path)
+            serializer = serializer.get_related_serializer(relation)
 
 
 class OrderingFilter(JsonApiFilter, _OrderingFilter):
