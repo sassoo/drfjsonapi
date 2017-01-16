@@ -71,7 +71,7 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
     one from the serializers `get_related_queryset` method.
     """
 
-    max_filters = 10
+    max_filters = 25
     max_relations = 3
 
     def __init__(self):
@@ -239,7 +239,7 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
     included.
     """
 
-    max_includes = 8
+    max_includes = 25
     max_relations = 3
 
     def __init__(self):

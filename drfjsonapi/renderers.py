@@ -85,13 +85,16 @@ class JsonApiRenderer(JSONRenderer):
              class for more information.
         """
 
+        if not resources:
+            return []
+
         # could be single model or many or serializer is None
         # if single then coerce into list
         models = getattr(resources.serializer, 'instance', None)
         if models and not isinstance(models, list):
             models = [models]
 
-        if not all((resources, models, hasattr(request, '_includes'))):
+        if not all((models, hasattr(request, '_includes'))):
             return []
         # could be a ReturnDict or ReturnList but coerce
         # into list so simple 'in' checks can work later
