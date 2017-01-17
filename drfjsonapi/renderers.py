@@ -60,11 +60,13 @@ class JsonApiRenderer(JSONRenderer):
                     f for f in fields[field].keys()
                     if f != 'serializer'
                 ]
+                # build a hash table of resource id &
+                # serializer class name so dupes are avoided
                 serializer = fields[field]['serializer']
-                rtype = serializer.get_rtype()
-                include_table['%s_%s' % (relation.pk, rtype)] = (
-                    relation, serializer, relation_fields
-                )
+                serializer.context['includes'] = relation_fields
+                data = serializer.to_representation(relation)
+                include_table['%s_%s' % (data['id'], data['type'])] = data
+
                 self._get_include(fields[field], relation, include_table)
 
     def get_included(self, resources, request):
@@ -110,9 +112,7 @@ class JsonApiRenderer(JSONRenderer):
         included = []
         for key, val in include_table.items():
             if key not in primary_table:
-                model, serializer, fields = val
-                serializer.context['includes'] = fields
-                included.append(serializer.to_representation(model))
+                included.append(val)
         return included
 
     def get_jsonapi(self):
