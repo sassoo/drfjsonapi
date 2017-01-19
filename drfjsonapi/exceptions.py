@@ -130,9 +130,9 @@ class RouteNotFound(GenericNotFound):
 class MethodNotAllowed(exceptions.APIException):
     """ Custom 405 Method Not Allowed error for more info """
 
-    default_detail = 'The "{method}" is not allowed at that endpoint. ' \
-                     'Only "{allowed_methods}" methods are allowed for ' \
-                     'that endpoint.'
+    default_detail = 'The "{method}" method is not allowed at that ' \
+                     'endpoint. Only "{allowed_methods}" methods are ' \
+                     'allowed for that endpoint.'
     link = 'https://tools.ietf.org/html/rfc7231#section-6.5.5'
     status_code = 405
     title = 'HTTP method not allowed'
