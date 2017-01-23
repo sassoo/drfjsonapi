@@ -86,6 +86,13 @@ class IntegerFilterField(FilterField):
                'lt', 'lte', 'startswith')
 
 
+class IsNullFilterField(FilterField):
+    """ Bool field supporting isnull lookups """
+
+    drf_field = serializers.BooleanField()
+    lookups = ('isnull',)
+
+
 class RelatedFilterField(FilterField):
     """ Used for filters referencing a relationship field """
 
