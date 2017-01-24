@@ -95,7 +95,7 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
         if filters:
             self.validate_filters(filters, serializer)
             queryset = queryset.filter(**self.get_filters())
-        return queryset
+        return queryset.distinct()
 
     def update_filter(self, related_path, lookup, value):
         """ Generate & store an ORM based filter on the filter param """
