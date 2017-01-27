@@ -9,7 +9,6 @@
 """
 
 from django.core.exceptions import ImproperlyConfigured
-from django.utils.functional import cached_property
 from rest_framework import exceptions
 from rest_framework import serializers
 from rest_framework.relations import ManyRelatedField
@@ -348,24 +347,21 @@ class PolymorphicSerializer(JsonApiSerializer):
     To use this each instance, typically a Django model,
     must have a designated field with a value that can be
     relied upon for distinguishing which serializer to use.
-    The value MUST be the JSON API "resource type", also
-    known as, rtype for the underlying instance.
 
     The instance field is specified by a `polymorphic_instance_field`
     property on the JsonApiMeta object:
 
-    ```
-    class JsonApiMeta:
-        polymorphic_instance_field = 'species'
-        polymorphic_serializers = (
-            CatSerializer,
-            DogSerializer,
-        )
-    ```
+        ```
+        class JsonApiMeta:
+            polymorphic_instance_field = 'species'
+            polymorphic_serializers = {
+                'cat': CatSerializer,
+                'dog': DogSerializer,
+            }
+        ```
 
-    The `polymorphic_serializers` property is an iterable
-    containing all of the serializers that may be backing
-    the instances.
+    The `polymorphic_serializers` property is a dict of
+    all the serializers that may be backing the instances.
     """
 
     def __init__(self, *args, **kwargs):
@@ -373,48 +369,43 @@ class PolymorphicSerializer(JsonApiSerializer):
 
         super().__init__(*args, **kwargs)
         instance_field = self.get_polymorphic_instance_field()
-        serializers = self.polymorphic_serializers
+        serializers = self.get_polymorphic_serializers()
 
         if not instance_field:
             msg = 'Using "%s" requires a "polymorphic_instance_field" ' \
                   'property on the JsonApiMeta object'
             raise ImproperlyConfigured(msg % self.__name__)
 
-        if not serializers or not isinstance(serializers, (list, tuple)):
+        if not serializers or not isinstance(serializers, dict):
             msg = 'Using "%s" requires a "polymorphic_serializers" ' \
                   'field which must be a dict on the JsonApiMeta object'
             raise ImproperlyConfigured(msg % self.__name__)
-
-    @cached_property
-    def polymorphic_serializers(self):
-        """ Cached serializer instances of all backend serializer """
-
-        return self.get_polymorphic_serializers()
 
     def get_polymorphic_instance_field(self):
         """ Return the string instance field name """
 
         meta = getattr(self, 'JsonApiMeta', None)
-        return getattr(meta, 'polymorphic_instance_field', 'rtype')
+        return getattr(meta, 'polymorphic_instance_field', None)
 
     def get_polymorphic_serializers(self):
         """ Initialize all the backing serializers & return them """
 
         meta = getattr(self, 'JsonApiMeta', None)
-        serializers = getattr(meta, 'polymorphic_serializers', ())
-        return [s(context=self.context) for s in serializers]
+        return getattr(meta, 'polymorphic_serializers', {})
 
     def get_polymorphic_serializer(self, instance):
         """ Given an instance find the right serializer """
 
         instance_field = self.get_polymorphic_instance_field()
-        rtype = getattr(instance, instance_field)
-        for serializer in self.polymorphic_serializers:
-            if serializer.get_rtype() == rtype:
-                return serializer
+        instance_value = getattr(instance, instance_field)
+        try:
+            serializer = self.get_polymorphic_serializers()[instance_value]
+            return serializer(context=self.context)
+        except KeyError:
+            return None
 
-    def to_representation(self, data):
+    def to_representation(self, instance):
         """ DRF override, use the instance_field on the instance """
 
-        serializer = self.get_polymorphic_serializer(data)
-        return serializer.to_representation(data)
+        serializer = self.get_polymorphic_serializer(instance)
+        return serializer.to_representation(instance)
