@@ -23,8 +23,8 @@ from .relations import ResourceRelatedField
 from .utils import _get_resource_url
 
 
-class QueryParamMixin:
-    """ Helpers for handling include & filter query params
+class IncludeMixin:
+    """ Helpers for handling the include query param
 
     This supports maximum flexibility by relying on the
     relationship fields for included related directives
@@ -33,7 +33,7 @@ class QueryParamMixin:
 
     The FilterBackends never know anything about the
     underlying relationship fields. Everything is
-    proxied through this simple serializer interface.
+    proxied through this simple serializer mixin.
     """
 
     def get_includables(self):
@@ -51,6 +51,7 @@ class QueryParamMixin:
         return [k for k, v in self.related_fields.items() if v.include]
 
     def get_related_queryset(self, field):
+        """ Get the optional filtered queryset for the relationship """
 
         try:
             related_field = self.related_fields[field]
@@ -73,7 +74,7 @@ class QueryParamMixin:
 
 
 # pylint: disable=abstract-method
-class JsonApiSerializer(QueryParamMixin, serializers.Serializer):
+class JsonApiSerializer(IncludeMixin, serializers.Serializer):
     """ JSON API Serializer """
 
     @property
@@ -334,10 +335,10 @@ class PolymorphicSerializer(JsonApiSerializer):
     relied upon for distinguishing which serializer to use.
 
     The instance field is specified by a `polymorphic_instance_field`
-    property on the JsonApiMeta object:
+    property on the Meta object:
 
         ```
-        class JsonApiMeta:
+        class Meta:
             polymorphic_instance_field = 'species'
             polymorphic_serializers = {
                 'cat': CatSerializer,
@@ -354,28 +355,28 @@ class PolymorphicSerializer(JsonApiSerializer):
 
         super().__init__(*args, **kwargs)
         instance_field = self.get_polymorphic_instance_field()
-        serializers = self.get_polymorphic_serializers()
+        _serializers = self.get_polymorphic_serializers()
 
         if not instance_field:
             msg = 'Using "%s" requires a "polymorphic_instance_field" ' \
-                  'property on the JsonApiMeta object'
-            raise ImproperlyConfigured(msg % self.__name__)
+                  'property on the Meta object'
+            raise ImproperlyConfigured(msg % self.__class__.__name__)
 
-        if not serializers or not isinstance(serializers, dict):
+        if not _serializers or not isinstance(_serializers, dict):
             msg = 'Using "%s" requires a "polymorphic_serializers" ' \
-                  'field which must be a dict on the JsonApiMeta object'
-            raise ImproperlyConfigured(msg % self.__name__)
+                  'field which must be a dict on the Meta object'
+            raise ImproperlyConfigured(msg % self.__class__.__name__)
 
     def get_polymorphic_instance_field(self):
         """ Return the string instance field name """
 
-        meta = getattr(self, 'JsonApiMeta', None)
+        meta = getattr(self, 'Meta', None)
         return getattr(meta, 'polymorphic_instance_field', None)
 
     def get_polymorphic_serializers(self):
         """ Initialize all the backing serializers & return them """
 
-        meta = getattr(self, 'JsonApiMeta', None)
+        meta = getattr(self, 'Meta', None)
         return getattr(meta, 'polymorphic_serializers', {})
 
     def get_polymorphic_serializer(self, instance):

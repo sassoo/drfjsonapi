@@ -12,17 +12,11 @@ import re
 from collections import OrderedDict
 from django.core.exceptions import ImproperlyConfigured
 from django.db.models.query import Prefetch
-from rest_framework.exceptions import ValidationError
 from rest_framework.filters import (
     BaseFilterBackend,
     OrderingFilter as _OrderingFilter,
 )
-from .exceptions import (
-    InvalidFilterParam,
-    InvalidIncludeParam,
-    InvalidSortParam,
-)
-from .filter_fields import RelatedFilterField
+from .exceptions import InvalidIncludeParam, InvalidSortParam
 from .utils import _dict_merge, _reduce_str_to_dict
 
 
@@ -38,81 +32,36 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
     """ Support the filtering of arbitrary resource fields
 
     The `filter_queryset` entry point method requires the view
-    provided to have a `get_serializer` method which is already
+    provided to have a `get_filterset` method which is already
     present on DRF GenericAPIView instances & it MUST return a
-    serializer for the primary data.
+    filterset for the primary data.
 
-    That serializer will be used to validate the `filter` query
-    param values. If the global `max_filters` property limit is
-    not exceeded then each filter is tested for eligibility.
-
-    For a field to be eligible for it MUST meet all of the
-    following criteria:
-
-        1. Not exceed the `max_relations` limit of nested
-           filters. For example, '?filter[foo.bar.baz.exact]=hi'
-           would be 3 relations.
-
-        2. Return a validator from the serializers validator
-           lookup method `get_filterable_validator`
-
-        3. Related fields must use the RelatedFilterField.
-           Also, related fields must return a serializer from
-           the serializers `get_related_serializer` method
-
-        4. Contain a valid lookup operator per the rules
-           of the validator returned in step 2.
-
-        5. Pass all validations
+    That filterset will be used to validate the `filter` query
+    param values.
 
     All vetted filters will have filter logic attached to the
-    primary datasets queryset. You can also define an additional
-    mandatory default queryset for related fields by returning
-    one from the serializers `get_related_queryset` method.
+    primary datasets queryset.
     """
-
-    max_filters = 25
-    max_relations = 3
-
-    def __init__(self):
-        """ The superclass doesn't have an __init__ defined """
-
-        self._filters = {}
 
     def filter_queryset(self, request, queryset, view):
         """ DRF entry point into the custom FilterBackend """
 
         try:
-            serializer = view.get_serializer()
-            if not serializer:
+            filterset = view.get_filterset()
+            if not filterset:
                 raise AttributeError
         except AttributeError:
-            msg = 'Using "%s" requires a view that returns a serializer ' \
-                  'from "get_serializer()"'
+            msg = 'Using "%s" requires a view that returns a ' \
+                  'filterset from "get_filterset()"'
             raise ImproperlyConfigured(msg % self.__class__.__name__)
 
         filters = self.get_query_filters(request)
         if filters:
-            self.validate_filters(filters, serializer)
-            queryset = queryset.filter(**self.get_filters())
-        return queryset.distinct()
-
-    def update_filter(self, related_path, lookup, value):
-        """ Generate & store an ORM based filter on the filter param """
-
-        self._filters['%s__%s' % (related_path, lookup)] = value
-
-    def update_related_filter(self, related_path, relation, serializer):
-        """ Generate & store an ORM based filter on the filter param """
-
-        queryset = serializer.get_related_queryset(relation)
-        if queryset is not None:
-            self._filters['%s__in' % related_path] = queryset
-
-    def get_filters(self):
-        """ Return the list of generated Q filter objects """
-
-        return self._filters
+            filters = filterset.to_internal_value(filters)
+            filters = filterset.validate(filters)
+            q_filter = filterset.get_filter_expressions(filters)
+            queryset = queryset.filter(q_filter).distinct()
+        return queryset
 
     def get_query_filters(self, request):
         """ Return the sanitized `filter` query parameters
@@ -121,82 +70,27 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
         expression to find all the filters that match a format
         of:
 
-            filter[<field>.<lookup>]=<value>
+            filter[<field>__<lookup>]=<value>
 
-        A tuple will be generated for each match containing the
-        query parameter without the value (left of the = sign),
-        the field to filter on (could be a relationship), the filter
-        operator, and the value to filter with (right of the = sign).
+        A dict will be generated for each match where the key
+        is the filter expression & the value is the value as
+        is in the query.
 
-        An example filter of `filter[home.city.exact]=Orlando`
-        would return a tuple of:
+        An example filter of `filter[home__city__exact]=Orlando`
+        would return a dict of:
 
-            ('filter[home.city.exact]', 'home.city', 'exact', 'Orlando')
-
-        :return:
-            tuple of tuples
+            {'home__city__exact': 'Orlando'}
         """
 
-        filters = []
+        filters = {}
         regex = re.compile(r'^filter\[([A-Za-z0-9_.]+)\]$')
-
         for param, value in request.query_params.items():
-            match = regex.match(param)
-            if match:
-                field, _, lookup = match.groups()[0].rpartition('.')
-                filters.append((param, field, lookup, value))
-        return tuple(filters)
-
-    def validate_filters(self, filters, serializer):
-        """ Validate all the sanitized filter query parameters """
-
-        if len(filters) > self.max_filters:
-            msg = 'The request has "%s" filter query parameters which ' \
-                  'exceeds the max number of "%s" that can be requested.' \
-                  % (len(filters), self.max_filters)
-            raise InvalidFilterParam(msg)
-
-        for _filter in filters:
-            self.validate_filter(_filter, serializer)
-
-    def validate_filter(self, _filter, serializer):
-        """ Validate each `filter` query param
-
-        Walk the serializers for deeply nested (relations) filter
-        requests to properly validate.
-        """
-
-        param, field, lookup, value = _filter
-        relations = field.split('.')
-
-        if len(relations) > self.max_relations:
-            msg = 'The "%s" filter query parameter exceeds the max ' \
-                  'relations limit of "%s"' % (param, self.max_relations)
-            raise InvalidFilterParam(msg)
-
-        for idx, relation in enumerate(relations):
-            coerced_value = None
-            related_path = '__'.join(relations[:idx + 1])
             try:
-                validator = serializer.get_filterable_validator(relation)
-                coerced_value = validator.validate(lookup, value)
-            except (AttributeError, KeyError):
-                msg = 'The "%s" filter query parameter is invalid, the ' \
-                      '"%s" field either does not exist on the requested ' \
-                      'resource or you are not allowed to filter on it.' \
-                      % (param, field)
-                raise InvalidFilterParam(msg)
-            except ValidationError as exc:
-                msg = 'The "%s" filter query parameters value failed ' \
-                      'validation checks with the following error(s): ' \
-                      '%s' % (param, ' '.join(exc.detail))
-                raise InvalidFilterParam(msg)
-
-            if coerced_value:
-                self.update_filter(related_path, lookup, coerced_value)
-            elif isinstance(validator, RelatedFilterField):
-                self.update_related_filter(related_path, relation, serializer)
-                serializer = serializer.get_related_serializer(relation)
+                param = regex.match(param).groups()[0]
+                filters[param] = value
+            except (AttributeError, IndexError):
+                continue
+        return filters
 
 
 class IncludeFilter(JsonApiFilter, BaseFilterBackend):
