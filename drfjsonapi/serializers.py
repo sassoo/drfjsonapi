@@ -36,21 +36,6 @@ class QueryParamMixin:
     proxied through this simple serializer interface.
     """
 
-    def get_filterable_validator(self, field):
-        """ Return a dict of fields allowed to be filtered on
-
-        By default the `JsonApiMeta.filterable_fields` property
-        is used to source the items.
-
-        The key of each item is the string name of the field &
-        the value is the `FilterField` object instance.
-        """
-
-        try:
-            return self.JsonApiMeta.filterable_fields[field]
-        except (AttributeError, KeyError):
-            return None
-
     def get_includables(self):
         """ Return includable related field names """
 
@@ -172,10 +157,10 @@ class JsonApiSerializer(QueryParamMixin, serializers.Serializer):
     def get_rtype(self):
         """ Return the string resource type as referenced by JSON API """
 
-        meta = getattr(self, 'JsonApiMeta', None)
+        meta = getattr(self, 'Meta', None)
         rtype = getattr(meta, 'rtype', None)
         if not rtype:
-            msg = '"%s" must either have a `JsonApiMeta.rtype` attribute ' \
+            msg = '"%s" must either have a `Meta.rtype` attribute ' \
                   'or override `get_rtype()`' % self.__class__.__name__
             raise ImproperlyConfigured(msg)
         return rtype
@@ -338,7 +323,7 @@ class JsonApiSerializer(QueryParamMixin, serializers.Serializer):
 class JsonApiModelSerializer(JsonApiSerializer, serializers.ModelSerializer):
     """ JSON API ModelSerializer """
 
-    pass
+    serializer_related_field = ResourceRelatedField
 
 
 class PolymorphicSerializer(JsonApiSerializer):

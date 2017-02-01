@@ -178,22 +178,20 @@ class JsonApiViewMixin:
 
         return request
 
-    def render_related_detail_view(self, field, base_name):
+    def render_related_view(self, field, view_name):
         """ Render the related view of a single resource """
 
         try:
-            name = '%s-detail' % base_name
-            view = self._get_related_view(name, 'retrieve', kwargs={
+            view = self._get_related_view(view_name, 'retrieve', kwargs={
                 'pk': getattr(self.get_object(), field),
             })
             return view.retrieve(self.request)
         except Http404:
             return Response(None)
 
-    def render_related_list_view(self, field, base_name):
+    def render_related_list_view(self, field, view_name):
         """ Render the related view of a resource collection """
 
-        name = '%s-list' % base_name
-        view = self._get_related_view(name, 'list')
+        view = self._get_related_view(view_name, 'list')
         view.queryset = getattr(self.get_object(), field).all()
         return view.list(self.request)

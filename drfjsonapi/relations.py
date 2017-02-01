@@ -8,26 +8,8 @@
 
 from django.utils.module_loading import import_string
 from django.utils.translation import ugettext_lazy as _
-from rest_framework.relations import (
-    ManyRelatedField,
-    PrimaryKeyRelatedField,
-)
+from rest_framework.relations import PrimaryKeyRelatedField
 from .utils import _get_resource_url, _get_url
-
-
-def _get_field_name(field):
-    """ Return the fields name """
-
-    return field.field_name or field.parent.field_name
-
-
-def _get_parent_serializer(field):
-    """ Return the fields parent serializer """
-
-    if isinstance(field.parent, ManyRelatedField):
-        return field.parent.parent
-    else:
-        return field.parent
 
 
 class ResourceRelatedField(PrimaryKeyRelatedField):
@@ -42,7 +24,7 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
                             '"{rtype}" resource types are accepted'),
     }
 
-    includable = False
+    includable = True
     include = False
     linkage = True
     related_view = None
@@ -57,6 +39,18 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
             val = kwargs.pop(attr, getattr(self, attr))
             setattr(self, attr, val)
         super().__init__(**kwargs)
+
+    @classmethod
+    def many_init(cls, *args, **kwargs):
+        """ DRF override to disable linkage on many relations unless overidden
+
+        This is to avoid a bunch of potentially unwanted data
+        which maybe resolved at a later date on demand
+        """
+
+        if 'linkage' not in kwargs:
+            kwargs['linkage'] = False
+        return super().many_init(*args, **kwargs)
 
     @property
     def rtype(self):
@@ -134,7 +128,6 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
         """
 
         data = {}
-
         related_url = self.get_links_related(parent_rid)
         if related_url:
             data['related'] = related_url
@@ -181,8 +174,8 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
         view = self.related_view
         if not view:
             view = '{rtype}-{field_name}'.format(
-                field_name=_get_field_name(self),
-                rtype=_get_parent_serializer(self).get_rtype(),
+                field_name=self.field_name,
+                rtype=self.parent.get_rtype(),
             )
         return view
 
@@ -232,32 +225,3 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
 
         rid = super().to_representation(value)
         return self.get_data(rid)
-
-
-class ManyResourceRelatedField(ResourceRelatedField):
-    """ JSON API related field for relationships
-
-    This field can be used as a drop-in replacement for the
-    DRF PrimaryKeyRelatedField with many=True.
-
-    A factory is probaby a way better pattern & if this needs
-    any additional tweaking at all then I'm going to remove it
-    cause it's a pain-in-the-ass! The alternative is to just
-    pass `many=True` cause way too much horrible shit is taking
-    place to avoid that one param.
-    """
-
-    def __init__(self, **kwargs):
-
-        del kwargs['_many_invoked']
-        super().__init__(**kwargs)
-
-    def __new__(cls, *args, **kwargs):
-
-        kwargs['linkage'] = False
-        kwargs['read_only'] = True
-
-        if '_many_invoked' not in kwargs:
-            kwargs['_many_invoked'] = True
-            return cls.many_init(*args, **kwargs)
-        return super().__new__(cls, *args, **kwargs)
