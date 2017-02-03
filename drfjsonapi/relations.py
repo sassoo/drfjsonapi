@@ -188,7 +188,8 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
 
         try:
             kwargs['context'] = kwargs.pop('context', self.context)
-            return import_string(self.serializer)(*args, **kwargs)
+            serializer = self.serializer.replace('.', '.serializers.')
+            return import_string(serializer)(*args, **kwargs)
         except ImportError:
             return None
 
