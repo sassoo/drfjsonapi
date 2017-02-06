@@ -25,15 +25,14 @@ class JsonApiFilterSet:
     def get_filter_expression(self, param, value):
         """ Return a valid django filter expression for the query param """
 
-        expression = {param: value}
-        return Q(expression)
+        return Q((param, value))
 
     def get_filter_expressions(self, data):
         """ Turn the vetted query param filters into Q object expressions """
 
-        ret = {}
+        ret = Q()
         for param, value in data.items():
-            ret[param] = self.get_filter_expression(param, value)
+            ret.add(self.get_filter_expression(param, value), Q.AND)
         return ret
 
     def get_filter_validator(self, field):

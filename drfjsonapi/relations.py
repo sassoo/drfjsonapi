@@ -173,10 +173,13 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
 
         view = self.related_view
         if not view:
-            view = '{rtype}-{field_name}'.format(
-                field_name=self.field_name,
-                rtype=self.parent.get_rtype(),
-            )
+            try:
+                field = self.field_name
+                rtype = self.parent.get_rtype()
+            except AttributeError:
+                field = self.parent.field_name
+                rtype = self.parent.parent.get_rtype()
+            view = '{rtype}-{field}'.format(field=field, rtype=rtype)
         return view
 
     def get_serializer(self, *args, **kwargs):
