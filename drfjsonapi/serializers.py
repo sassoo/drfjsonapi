@@ -23,6 +23,28 @@ from .relations import ResourceRelatedField
 from .utils import _get_resource_url
 
 
+class EmberDataMixin:
+    """ Helpers for handling ember data clients
+
+    Ember Data implements the JSON-API spec but by default
+    sends `null` for all fields not set in the client. This
+    can make things annoying in your DRF serializers where
+    null is not valid but the field may not be required.
+
+    It means a bunch of extra work. This mixin simply
+    removes null fields before the serializer does anything
+    with them.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if hasattr(self, 'initial_data'):
+            self.initial_data = {
+                k: v for k, v in self.initial_data.items()
+                if v is not None
+            }
+
+
 class IncludeMixin:
     """ Helpers for handling the include query param
 
@@ -119,7 +141,7 @@ class JsonApiSerializer(IncludeMixin, serializers.Serializer):
 
         return {}
 
-    def get_relationships(self, data=None, instance=None):
+    def get_relationships(self, data):
         """ Return the "Relationships Object" for a resource
 
         This should return a dict that is compliant with the
@@ -138,21 +160,14 @@ class JsonApiSerializer(IncludeMixin, serializers.Serializer):
             jsonapi.org/format/#document-resource-object-relationships
         """
 
-        includes = self.context.get('includes', {})
+        # includes = self.context.get('includes', {})
         relationships = {}
         for key, field in self.related_fields.items():
-            if instance and not field.linkage and key not in includes:
-                del self.fields[key]
-                relationships[key] = {
-                    'links': field.get_links(instance.pk),
-                    'meta': field.get_meta(),
-                }
-            elif data:
-                relationships[key] = {
-                    'data': data.pop(key),
-                    'links': field.get_links(data['id']),
-                    'meta': field.get_meta(),
-                }
+            relationships[key] = {
+                'data': data.pop(key),
+                'links': field.get_links(data['id']),
+                'meta': field.get_meta(),
+            }
         return relationships
 
     def get_rtype(self):
@@ -274,17 +289,14 @@ class JsonApiSerializer(IncludeMixin, serializers.Serializer):
         """
 
         self.to_representation_sparse()
-
-        # avoid db queries for unwanted fields
-        relationships = self.get_relationships(instance=instance)
+        print('XXX UNWANTED DB QUERIES OCCUR')
         data = super().to_representation(instance)
-        relationships.update(self.get_relationships(data=data))
 
         return {
             'attributes': data,
             'links': self.get_links(instance),
             'meta': self.get_meta(),
-            'relationships': relationships,
+            'relationships': self.get_relationships(data=data),
             'type': self.get_rtype(),
             'id': data.pop('id'),
         }
