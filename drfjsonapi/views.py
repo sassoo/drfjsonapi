@@ -7,6 +7,7 @@
 
 import traceback
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.core.urlresolvers import resolve, reverse
 from django.http import Http404
 from rest_framework import exceptions
@@ -188,14 +189,18 @@ class JsonApiViewMixin:
         return request
 
     def render_related_view(self, field, view_name):
-        """ Render the related view of a single resource """
+        """ Render the related view of a single resource
+
+        NOTE: If it's a OneToOneField the a DoesNotExist exception
+              is thrown.
+        """
 
         try:
             view = self._get_related_view(view_name, 'retrieve', kwargs={
                 'pk': getattr(self.get_object(), field),
             })
             return view.retrieve(self.request)
-        except Http404:
+        except (Http404, ObjectDoesNotExist):
             return Response(None)
 
     def render_related_list_view(self, field, view_name):

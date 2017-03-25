@@ -23,28 +23,6 @@ from .relations import ResourceRelatedField
 from .utils import _get_resource_url
 
 
-class EmberDataMixin:
-    """ Helpers for handling ember data clients
-
-    Ember Data implements the JSON-API spec but by default
-    sends `null` for all fields not set in the client. This
-    can make things annoying in your DRF serializers where
-    null is not valid but the field may not be required.
-
-    It means a bunch of extra work. This mixin simply
-    removes null fields before the serializer does anything
-    with them.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if hasattr(self, 'initial_data'):
-            self.initial_data = {
-                k: v for k, v in self.initial_data.items()
-                if v is not None
-            }
-
-
 class IncludeMixin:
     """ Helpers for handling the include query param
 
