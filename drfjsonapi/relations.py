@@ -8,8 +8,28 @@
 
 from django.utils.module_loading import import_string
 from django.utils.translation import ugettext_lazy as _
-from rest_framework.relations import PrimaryKeyRelatedField
+from rest_framework.relations import (
+    MANY_RELATION_KWARGS,
+    ManyRelatedField,
+    PrimaryKeyRelatedField,
+)
 from .utils import _get_resource_url, _get_url
+
+
+class ManyResourceRelatedField(ManyRelatedField):
+    """ Override of DRF's native ManyRelated Field """
+
+    def get_attribute(self, instance):
+        """ DRF override to avoid unwanted database queries
+
+        Relationships must either be included or have linkage
+        enabled otherwise the database query is skipped.
+        """
+
+        includes = self.context.get('includes', {})
+        if self.field_name in includes or self.child_relation.linkage:
+            return super().get_attribute(instance)
+        return []
 
 
 class ResourceRelatedField(PrimaryKeyRelatedField):
@@ -42,15 +62,23 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
 
     @classmethod
     def many_init(cls, *args, **kwargs):
-        """ DRF override to disable linkage on many relations unless overidden
+        """ DRF override for a custom ManyRelated class
 
-        This is to avoid a bunch of potentially unwanted data
-        which maybe resolved at a later date on demand
+        DRF override to disable linkage on many relations unless
+        overidden. This is to avoid a bunch of potentially unwanted
+        data which maybe resolved at a later date on demand
         """
 
         if 'linkage' not in kwargs:
             kwargs['linkage'] = False
-        return super().many_init(*args, **kwargs)
+
+        # begin - this is all ripped from DRF
+        list_kwargs = {'child_relation': cls(*args, **kwargs)}
+        for key in kwargs:
+            if key in MANY_RELATION_KWARGS:
+                list_kwargs[key] = kwargs[key]
+        # end - this is all ripped from DRF
+        return ManyResourceRelatedField(**list_kwargs)
 
     @property
     def rtype(self):
@@ -98,7 +126,7 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
         return {'self': url}
 
     def get_filtered_queryset(self):
-        """ Override to use a filtered queyset
+        """ Use a filtered queyset
 
         DRF doesn't have a built-in method for passing or
         providing filters for related fields on a serializer.

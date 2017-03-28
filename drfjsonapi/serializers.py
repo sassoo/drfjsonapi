@@ -138,14 +138,15 @@ class JsonApiSerializer(IncludeMixin, serializers.Serializer):
             jsonapi.org/format/#document-resource-object-relationships
         """
 
-        # includes = self.context.get('includes', {})
+        includes = self.context.get('includes', {})
         relationships = {}
         for key, field in self.related_fields.items():
             relationships[key] = {
-                'data': data.pop(key),
                 'links': field.get_links(data['id']),
                 'meta': field.get_meta(),
             }
+            if key in includes or field.linkage:
+                relationships[key].update({'data': data.pop(key)})
         return relationships
 
     def get_rtype(self):
@@ -267,7 +268,6 @@ class JsonApiSerializer(IncludeMixin, serializers.Serializer):
         """
 
         self.to_representation_sparse()
-        print('XXX UNWANTED DB QUERIES OCCUR')
         data = super().to_representation(instance)
 
         return {
