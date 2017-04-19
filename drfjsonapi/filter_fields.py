@@ -56,6 +56,13 @@ class FilterField:
             return self.field.run_validation(data=value)
 
 
+class ListFilterField(FilterField):
+    """ General ListField filter with common list lookups """
+
+    drf_field = serializers.ListField()
+    lookups = ('contains',)
+
+
 class BooleanFilterField(FilterField):
     """ General BooleanField filter with common bool lookups """
 
