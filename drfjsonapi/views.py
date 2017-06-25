@@ -12,6 +12,8 @@ from django.core.urlresolvers import resolve, reverse
 from django.http import Http404
 from rest_framework import exceptions
 from rest_framework.decorators import api_view
+from rest_framework.parsers import JSONParser
+from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 from .exceptions import (
@@ -36,7 +38,9 @@ from .filters import (
     SparseFilter,
 )
 from .filtersets import JsonApiFilterSet
-from .pagination import JsonApiPagination
+from .renderers import JsonApiRenderer
+from .pagination import JsonApiPagination, LimitOffsetPagination
+from .parsers import JsonApiParser
 from .status_codes import status_codes
 from .utils import _random_str
 
@@ -82,7 +86,6 @@ def jsonapi_exception_handler(exc, context):
     other standard JSON API compliant key/vals.
     """
 
-    # pylint: disable=redefined-variable-type
     if isinstance(exc, Http404):
         exc = ResourceNotFound()
     elif isinstance(exc, exceptions.MethodNotAllowed):
@@ -129,6 +132,12 @@ class JsonApiViewMixin:
     limited to determining if the query params used have been
     enabled on the view, via this modules filter_backends.
     """
+
+    filter_backends = (FieldFilter, IncludeFilter, OrderingFilter,
+                       SparseFilter)
+    pagination_class = LimitOffsetPagination
+    parser_classes = (JsonApiParser, JSONParser)
+    renderer_classes = (JsonApiRenderer, JSONRenderer)
 
     def _get_related_view(self, view_name, action, kwargs=None):
         """ Return the related view instance & check global perms """
@@ -191,7 +200,7 @@ class JsonApiViewMixin:
     def render_related_view(self, field, view_name):
         """ Render the related view of a single resource
 
-        NOTE: If it's a OneToOneField the a DoesNotExist exception
+        NOTE: If it's a OneToOneField a DoesNotExist exception
               is thrown.
         """
 
