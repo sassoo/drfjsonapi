@@ -279,33 +279,25 @@ class JsonApiSerializer(IncludeMixin, serializers.Serializer):
             'id': data.pop('id'),
         }
 
-    def validate_embedded(self, data, fields):
+    def validate_embedded(self, data, field, serializer_class):
         """ Validate embedded lists helper method
 
-        This is like DRF's `validate()` except it takes a tuple
-        of tuples in the following format:
-
-            (field_name, serializer_class)
-
-        The fields values will be iterated & validated individually
-        using the provided serializer. It will then construct
-        proper ValidationError's so the JSON pointers reference the
-        list index value where the error occurred.
+        A proper ValidationError will be constructed so the
+        JSON pointers reference the list index value where the
+        error occurred.
 
         This is mostly useful for embedded objects where the django
         field is a JSONField.
         """
 
         errors = {}
+        value = data.get(field, [])  # empty if PATCH
 
-        for name, serializer_class in fields:
-            value = data.get(name, [])  # empty if PATCH
-
-            for idx, data_item in enumerate(value):
-                serializer = serializer_class(data=data_item)
-                if not serializer.is_valid():
-                    for item_field, error in serializer.errors.items():
-                        errors['%s/%s/%s' % (name, idx, item_field)] = error
+        for idx, item in enumerate(value):
+            serializer = serializer_class(data=item)
+            if not serializer.is_valid():
+                for item_field, error in serializer.errors.items():
+                    errors['%s/%s/%s' % (field, idx, item_field)] = error
 
         if errors:
             raise serializers.ValidationError(errors)
