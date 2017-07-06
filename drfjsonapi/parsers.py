@@ -177,12 +177,12 @@ class JsonApiParser(JSONParser):
                               'contain `id` & `type` fields if setting '
                               'otherwise null if unsetting.' % key, link)
             elif isinstance(val['data'], list):
-                self.deny('Modifying the %s relationship or any to-many '
-                          'relationships for that matter are is not '
-                          'currently supported. Instead, modify the to-one '
-                          'side directly.' % key, link)
+                self.deny('Modifying the "%s" relationship or any to-many '
+                          'relationships for that matter is not currently '
+                          'supported. Instead, modify the to-one side of '
+                          'the relationship.' % key, link)
             elif val['data']:
-                self.fail('The relationship key %s is malformed & impossible '
+                self.fail('The relationship key "%s" is malformed & impossible '
                           'for us to understand your intentions. It MUST be '
                           'a hash & contain a `data` field compliant with '
                           'the spec\'s resource linkage section or null if '
