@@ -166,8 +166,9 @@ class JsonApiParser(JSONParser):
                 self.fail('Relationship key %s MUST be a hash & contain '
                           'a `data` field compliant with the spec\'s '
                           'resource linkage section.' % key, link)
-
-            if isinstance(val['data'], dict):
+            elif isinstance(val['data'], list) or val['data'] is None:
+                continue
+            elif isinstance(val['data'], dict):
                 data = val['data']
                 rid = isinstance(data.get('id'), str)
                 rtype = isinstance(data.get('type'), str)
@@ -176,12 +177,7 @@ class JsonApiParser(JSONParser):
                     self.fail('%s relationship\'s resource linkage MUST '
                               'contain `id` & `type` fields if setting '
                               'otherwise null if unsetting.' % key, link)
-            elif isinstance(val['data'], list):
-                self.deny('Modifying the "%s" relationship or any to-many '
-                          'relationships for that matter is not currently '
-                          'supported. Instead, modify the to-one side of '
-                          'the relationship.' % key, link)
-            elif val['data']:
+            else:
                 self.fail('The relationship key "%s" is malformed & impossible '
                           'for us to understand your intentions. It MUST be '
                           'a hash & contain a `data` field compliant with '
