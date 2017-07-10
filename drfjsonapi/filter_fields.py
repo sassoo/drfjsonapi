@@ -78,6 +78,13 @@ class CharFilterField(FilterField):
                'exact', 'iexact', 'startswith', 'istartswith')
 
 
+class DateFilterField(FilterField):
+    """ General DateField filter with common date lookups """
+
+    drf_field = serializers.DateField()
+    lookups = ('exact', 'gt', 'gte', 'lt', 'lte')
+
+
 class DateTimeFilterField(FilterField):
     """ General DateTimeField filter with common datetime lookups """
 
