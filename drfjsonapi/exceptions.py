@@ -31,8 +31,7 @@ class ManyExceptions(exceptions.APIException):
             return 400
         elif not same and codes[0].startswith('5'):
             return 500
-        else:
-            return codes[0]
+        return codes[0]
 
 
 """
