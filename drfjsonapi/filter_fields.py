@@ -12,6 +12,8 @@
     of 3rd party stuff that uses forms for validations.
 """
 
+import ast
+
 from django.core.exceptions import ImproperlyConfigured
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
@@ -56,13 +58,6 @@ class FilterField:
             return self.field.run_validation(data=value)
 
 
-class ListFilterField(FilterField):
-    """ General ListField filter with common list lookups """
-
-    drf_field = serializers.ListField()
-    lookups = ('contains',)
-
-
 class BooleanFilterField(FilterField):
     """ General BooleanField filter with common bool lookups """
 
@@ -105,6 +100,23 @@ class IsNullFilterField(FilterField):
 
     drf_field = serializers.BooleanField()
     lookups = ('isnull',)
+
+
+class ListFilterField(FilterField):
+    """ General ListField filter with common list lookups """
+
+    drf_field = serializers.ListField()
+    lookups = ('contains',)
+
+    def validate(self, lookup, value):
+        """ FilterField override to ensure value is a list """
+
+        try:
+            value = ast.literal_eval(value)
+        except:
+            msg = '"%s" cannot be coerced into a list' % value
+            raise ValidationError(msg)
+        return super().validate(lookup, value)
 
 
 class RelatedFilterField(FilterField):
