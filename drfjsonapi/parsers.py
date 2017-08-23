@@ -178,11 +178,12 @@ class JsonApiParser(JSONParser):
                               'contain `id` & `type` fields if setting '
                               'otherwise null if unsetting.' % key, link)
             else:
-                self.fail('The relationship key "%s" is malformed & impossible '
-                          'for us to understand your intentions. It MUST be '
-                          'a hash & contain a `data` field compliant with '
-                          'the spec\'s resource linkage section or null if '
-                          'you want to unset the relationship.' % key, link)
+                self.fail('The relationship key "%s" is malformed & '
+                          'impossible for us to understand your intentions. '
+                          'It MUST be a hash & contain a `data` field '
+                          'compliant with the spec\'s resource linkage '
+                          'section or null if you want to unset the '
+                          'relationship.' % key, link)
 
     def _parse_resource(self, resource, req):
         """ Ensure compliance with the spec's resource objects section
