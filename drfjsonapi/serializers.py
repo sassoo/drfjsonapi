@@ -356,7 +356,7 @@ class PolymorphicSerializer(JsonApiSerializer):
         return getattr(meta, 'polymorphic_instance_field', None)
 
     def get_polymorphic_serializers(self):
-        """ Initialize all the backing serializers & return them """
+        """ Return all the backing serializer classes """
 
         meta = getattr(self, 'Meta', None)
         return getattr(meta, 'polymorphic_serializers', {})
@@ -366,14 +366,12 @@ class PolymorphicSerializer(JsonApiSerializer):
 
         instance_field = self.get_polymorphic_instance_field()
         instance_value = getattr(instance, instance_field)
-        try:
-            serializer = self.get_polymorphic_serializers()[instance_value]
-            return serializer(context=self.context)
-        except KeyError:
-            return None
+
+        serializer = self.get_polymorphic_serializers()[instance_value]
+        return serializer(context=self.context)
 
     def to_representation(self, instance):
-        """ DRF override, use the instance_field on the instance """
+        """ DRF override, use the real serializer on the instance """
 
         serializer = self.get_polymorphic_serializer(instance)
         return serializer.to_representation(instance)
