@@ -175,7 +175,7 @@ class JsonApiParser(JSONParser):
 
                 if not rid or not rtype:
                     self.fail('%s relationship\'s resource linkage MUST '
-                              'contain `id` & `type` fields if setting '
+                              'contain `id` & `type` string fields if setting '
                               'otherwise null if unsetting.' % key, link)
             else:
                 self.fail('The relationship key "%s" is malformed & '
