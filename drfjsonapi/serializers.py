@@ -141,12 +141,13 @@ class JsonApiSerializer(IncludeMixin, serializers.Serializer):
         includes = self.context.get('includes', {})
         relationships = {}
         for key, field in self.related_fields.items():
+            relationship_data = data.pop(key)
             relationships[key] = {
                 'links': field.get_links(data['id']),
                 'meta': field.get_meta(),
             }
             if key in includes or field.linkage:
-                relationships[key].update({'data': data.pop(key)})
+                relationships[key].update({'data': relationship_data})
         return relationships
 
     def get_rtype(self):
