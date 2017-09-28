@@ -309,6 +309,19 @@ class JsonApiModelSerializer(JsonApiSerializer, serializers.ModelSerializer):
 
     serializer_related_field = ResourceRelatedField
 
+    def get_extra_kwargs(self):
+        """ DRF override to initialize related field serializers """
+
+        kwargs = super().get_extra_kwargs()
+        serializers = getattr(self.Meta, 'related_serializers', {})
+
+        for field, serializer in serializers.items():
+            try:
+                kwargs[field]['serializer'] = serializer
+            except KeyError:
+                kwargs[field] = {'serializer': serializer}
+        return kwargs
+
 
 class PolymorphicSerializer(JsonApiSerializer):
     """ A very basic READ-ONLY Polymorphic serializer

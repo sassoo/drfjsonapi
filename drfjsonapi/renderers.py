@@ -169,7 +169,7 @@ class JsonApiRenderer(JSONRenderer):
             'meta': self.get_meta(pager),
         }
 
-    def render(self, data, media_type=None, renderer_context=None):
+    def render(self, data, accepted_media_type=None, renderer_context=None):
         """ DRF entry point
 
         `data` can be quite a few different data formats
@@ -198,6 +198,6 @@ class JsonApiRenderer(JSONRenderer):
 
         return super(JsonApiRenderer, self).render(
             data,
-            media_type,
+            accepted_media_type,
             renderer_context,
         )
