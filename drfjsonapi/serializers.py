@@ -309,19 +309,6 @@ class JsonApiModelSerializer(JsonApiSerializer, serializers.ModelSerializer):
 
     serializer_related_field = ResourceRelatedField
 
-    def get_extra_kwargs(self):
-        """ DRF override to initialize related field serializers """
-
-        kwargs = super().get_extra_kwargs()
-        serializers = getattr(self.Meta, 'related_serializers', {})
-
-        for field, serializer in serializers.items():
-            try:
-                kwargs[field]['serializer'] = serializer
-            except KeyError:
-                kwargs[field] = {'serializer': serializer}
-        return kwargs
-
 
 class PolymorphicSerializer(JsonApiSerializer):
     """ A very basic READ-ONLY Polymorphic serializer
@@ -351,14 +338,14 @@ class PolymorphicSerializer(JsonApiSerializer):
 
         super().__init__(*args, **kwargs)
         instance_field = self.get_polymorphic_instance_field()
-        _serializers = self.get_polymorphic_serializers()
+        serializers = self.get_polymorphic_serializers()
 
         if not instance_field:
             msg = 'Using "%s" requires a "polymorphic_instance_field" ' \
                   'property on the Meta object'
             raise ImproperlyConfigured(msg % self.__class__.__name__)
 
-        if not _serializers or not isinstance(_serializers, dict):
+        if not serializers or not isinstance(serializers, dict):
             msg = 'Using "%s" requires a "polymorphic_serializers" ' \
                   'field which must be a dict on the Meta object'
             raise ImproperlyConfigured(msg % self.__class__.__name__)
