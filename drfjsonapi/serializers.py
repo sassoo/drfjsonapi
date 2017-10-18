@@ -153,13 +153,12 @@ class JsonApiSerializer(IncludeMixin, serializers.Serializer):
     def get_rtype(self):
         """ Return the string resource type as referenced by JSON API """
 
-        meta = getattr(self, 'Meta', None)
-        rtype = getattr(meta, 'rtype', None)
-        if not rtype:
+        try:
+            return self.Meta.rtype
+        except AttributeError:
             msg = '"%s" must either have a `Meta.rtype` attribute ' \
                   'or override `get_rtype()`' % self.__class__.__name__
             raise ImproperlyConfigured(msg)
-        return rtype
 
     def is_valid(self, **kwargs):
         """ DRF override for error handling """
