@@ -5,8 +5,6 @@
     Private & probably shady helper utilities
 """
 
-import uuid
-
 from functools import reduce
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.urlresolvers import NoReverseMatch
@@ -75,12 +73,6 @@ def _get_url(view_name, context, kwargs=None):
         )
     except NoReverseMatch:
         return None
-
-
-def _random_str():
-    """ Return a random string """
-
-    return str(uuid.uuid4())
 
 
 def _reduce_str_to_dict(field, val=None, sep='__'):

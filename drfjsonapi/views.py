@@ -9,6 +9,7 @@ import traceback
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.urlresolvers import resolve, reverse
+from django.utils.crypto import get_random_string
 from django.http import Http404
 from rest_framework import exceptions
 from rest_framework.decorators import api_view
@@ -42,14 +43,13 @@ from .renderers import JsonApiRenderer
 from .pagination import JsonApiPagination, LimitOffsetPagination
 from .parsers import JsonApiParser
 from .status_codes import status_codes
-from .utils import _random_str
 
 
 def _get_error(exc):
     """ Same order as error members documented in JSON API """
 
     return {
-        'id': _random_str(),
+        'id': get_random_string(),
         'links': {'about': getattr(exc, 'link', '')},
         'status': status_codes[exc.status_code],
         'code': getattr(exc, 'code', exc.__class__.__name__),
