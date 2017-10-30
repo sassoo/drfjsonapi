@@ -82,15 +82,10 @@ class JsonApiParser(JSONParser):
         :return: dict
         """
 
-        ret = {}
-
-        for key, val in relationships.items():
-            if not val['data']:
-                ret[key] = None
-            else:
-                ret[key] = val['data']
-
-        return ret
+        return {
+            k: v['data'] or None
+            for k, v in relationships.items()
+        }
 
     def normalize(self, data):
         """ Invoke the JSON API normalizer
