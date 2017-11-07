@@ -2,8 +2,7 @@
     drfjsonapi.parsers
     ~~~~~~~~~~~~~~~~~~~
 
-    DRF parser that is compliant with the JSON API
-    specification.
+    DRF parsers that is compliant with the JSON API specification.
 
     It's broken down into 2 parts:
 
@@ -12,252 +11,90 @@
            expected by DRF serializers.
 """
 
-from rest_framework import exceptions
+from jsonschema import Draft4Validator
+from jsonschema.exceptions import best_match
 from rest_framework.parsers import JSONParser
-from .exceptions import ConflictError
+
+from .exceptions import InvalidBody
 from .renderers import JsonApiRenderer
+from .schema import (
+    RELATIONSHIP_LINKAGE_SCHEMA,
+    RESOURCE_OBJECT_SCHEMA,
+)
 
 
-class JsonApiParser(JSONParser):
-    """ JSON API compliant DRF parser
+def _validate_jsonschema(data: dict, schema: dict) -> None:
+    """ Raise an InvalidBody exception if non-compliant with the spec """
 
-    Inherit from the DRF JSONParser since JSON API is simply
-    a structured representation of JSON.
-    """
+    errors = Draft4Validator(schema).iter_errors(data)
+    error = best_match(errors)
+    if error:
+        exc = InvalidBody(error.message)
+        exc.link = error.schema['uri']
+        exc.meta = {'spec': error.schema['description']}
+        exc.source = {'pointer': '/' + '/'.join(error.absolute_path)}
+        raise exc
+
+
+class JsonApiRelationshipNormalizer:
+    """ Normalize a JSON API relationship update compliant payload """
+
+    def normalize(self, data):
+        """ Entry point from the parser
+
+        XXX FINISH
+        """
+
+        raise NotImplementedError
+
+
+class JsonApiRelationshipParser(JSONParser):
+    """ JSON API "Updating Relationships" compliant DRF parser """
 
     media_type = 'application/vnd.api+json'
     renderer_class = JsonApiRenderer
 
-    def parse(self, stream, media_type=None, parser_context=None):
-        """ Entry point invoked by DRF
+    jsonapi_normalizer = JsonApiRelationshipNormalizer
+    jsonapi_schema = RELATIONSHIP_LINKAGE_SCHEMA
 
-        Order is important. Start from the request body root key
-        & work your way down so exception handling is easier to
-        follow.
+    def parse(self, *args, **kwargs):  # pylint: disable=arguments-differ
+        """ DRF entry point """
+
+        body = super().parse(*args, **kwargs)
+        _validate_jsonschema(body, self.jsonapi_schema)
+        return self.normalizer().normalize(body)
+
+
+class JsonApiResourceNormalizer:
+    """ Normalize a JSON API single "Resource Object" compliant payload """
+
+    def normalize(self, body: dict) -> dict:
+        """ Entry point from the parser
+
+        Flatten the payloads attributes & relationships so DRF
+        serializers work as expected.
         """
 
-        req = parser_context['request']
-        data = super(JsonApiParser, self).parse(
-            stream,
-            media_type,
-            parser_context
-        )
-
-        self._parse_top_level(data)
-        self._parse_resource(data['data'], req)
-
-        data = data['data']
-
-        if 'attributes' in data:
-            self._parse_attributes(data['attributes'])
-        if 'relationships' in data:
-            self._parse_relationships(data['relationships'])
-
-        return self.normalize(data)
-
-    @staticmethod
-    def _normalize_attributes(attributes):
-        """ Get all the attributes by key/val & return them
-
-        :param attributes:
-            dict JSON API attributes object
-        :return: dict
-        """
-
-        return attributes
-
-    @staticmethod
-    def _normalize_relationships(relationships):
-        """ Get all the relationships by key/val & return them
-
-        A normalized relationship dict uses the key name & value
-        without any alteration if present. If not present, then
-        the client wants to unset the relationship so it will be
-        set to None.
-
-        INFO: only works for to-one relationships.
-
-        :param relationships:
-            dict JSON API relationships object
-        :return: dict
-        """
-
-        return {
-            k: v['data'] or None
-            for k, v in relationships.items()
-        }
-
-    def normalize(self, data):
-        """ Invoke the JSON API normalizer
-
-        This is done by flattenting the payloads attributes &
-        relationships.
-
-        We don't need to vet the inputs much because the Parser
-        has already done all the work.
-
-        :param data:
-            the already vetted & parsed payload
-        :return:
-            normalized dict
-        """
-
-        if 'attributes' in data:
-            attributes = data.pop('attributes')
-            attributes = self._normalize_attributes(attributes)
-
-            data.update(attributes)
-
-        if 'relationships' in data:
-            relationships = data.pop('relationships')
-            relationships = self._normalize_relationships(relationships)
-
-            data.update(relationships)
-
+        data = body['data'].get('attributes', {})
+        data.update({
+            k: v['data']
+            for k, v in body['data'].get('relationships', {}).items()
+        })
         return data
 
-    def _parse_attributes(self, attributes):
-        """ Ensure compliance with the spec's attributes section
 
-        Specifically, the attributes object of the single resource
-        object. This contains the key / values to be mapped to the
-        model.
+class JsonApiResourceParser(JSONParser):
+    """ JSON API single "Resource Object" compliant DRF parser """
 
-        :param attributes:
-            dict JSON API attributes object
-        """
+    media_type = 'application/vnd.api+json'
+    renderer_class = JsonApiRenderer
 
-        link = 'jsonapi.org/format/#document-resource-object-attributes'
+    jsonapi_normalizer = JsonApiResourceNormalizer
+    jsonapi_schema = RESOURCE_OBJECT_SCHEMA
 
-        if not isinstance(attributes, dict):
-            self.fail('The JSON API resource object attributes key MUST '
-                      'be a hash.', link)
+    def parse(self, *args, **kwargs):  # pylint: disable=arguments-differ
+        """ DRF entry point """
 
-        if 'id' in attributes or 'type' in attributes:
-            self.fail('A field name of `id` or `type` is not allowed in '
-                      'the attributes object. They should be top-level '
-                      'keys.', link)
-
-    def _parse_relationships(self, relationships):
-        """ Ensure compliance with the spec's relationships section
-
-        Specifically, the relationships object of the single resource
-        object. For modifications we only support relationships via
-        the `data` key referred to as Resource Linkage.
-
-        :param relationships:
-            dict JSON API relationships object
-        """
-
-        link = 'jsonapi.org/format/#document-resource-object-relationships'
-
-        if not isinstance(relationships, dict):
-            self.fail('The JSON API resource object relationships key MUST '
-                      'be a hash & comply with the spec\'s resource linkage '
-                      'section.', link)
-
-        for key, val in relationships.items():
-            if not isinstance(val, dict) or 'data' not in val:
-                self.fail('Relationship key %s MUST be a hash & contain '
-                          'a `data` field compliant with the spec\'s '
-                          'resource linkage section.' % key, link)
-            elif isinstance(val['data'], list) or val['data'] is None:
-                continue
-            elif isinstance(val['data'], dict):
-                data = val['data']
-                rid = isinstance(data.get('id'), str)
-                rtype = isinstance(data.get('type'), str)
-
-                if not rid or not rtype:
-                    self.fail('%s relationship\'s resource linkage MUST '
-                              'contain `id` & `type` string fields if setting '
-                              'otherwise null if unsetting.' % key, link)
-            else:
-                self.fail('The relationship key "%s" is malformed & '
-                          'impossible for us to understand your intentions. '
-                          'It MUST be a hash & contain a `data` field '
-                          'compliant with the spec\'s resource linkage '
-                          'section or null if you want to unset the '
-                          'relationship.' % key, link)
-
-    def _parse_resource(self, resource, req):
-        """ Ensure compliance with the spec's resource objects section
-
-        :param resource:
-            dict JSON API resource object
-        """
-
-        link = 'jsonapi.org/format/#document-resource-objects'
-
-        if not resource.get('type'):
-            self.fail('JSON API requires that every resource object MUST '
-                      'contain a `type` top-level key.', link)
-        elif not isinstance(resource['type'], str):
-            self.fail('The top-level `type` key in resource objects MUST '
-                      'be a string.', link)
-
-        if req.method in ('PATCH', 'PUT'):
-            if not resource.get('id'):
-                self.fail('JSON API requires that every resource object '
-                          'MUST contain an `id` top-level key when making '
-                          'an update.', link)
-            elif not isinstance(resource['id'], str):
-                self.fail('The top-level `id` key in resource objects MUST '
-                          'be a string.', link)
-            elif resource['id'] != req.parser_context['kwargs']['pk']:
-                link = 'jsonapi.org/format/#crud-updating-responses-409'
-                self.conflict('The value of the top-level `id` does not '
-                              'match the id requested in the URL', link)
-
-        if 'attributes' not in resource and 'relationships' not in resource:
-            self.fail('Modifiying or creating resources require at minimum '
-                      'an attributes object and/or relationship object.', link)
-
-        if resource.get('id') and req.method == 'POST':
-            self.deny('Our API does not support client-generated ID\'s '
-                      'when creating NEW resources. Instead, our API will '
-                      'generate one for you & return it in the response.',
-                      'jsonapi.org/format/#crud-creating-client-ids')
-
-    def _parse_top_level(self, data):
-        """ Ensure compliance with the spec's top-level section """
-
-        link = 'jsonapi.org/format/#document-top-level'
-
-        try:
-            if not isinstance(data['data'], dict):
-                raise TypeError
-        except (KeyError, TypeError):
-            self.fail('JSON API payloads MUST be a hash at the most '
-                      'top-level; rooted at a key named `data` where the '
-                      'value must be a hash. Currently, we only support '
-                      'JSON API payloads that comply with the single '
-                      'Resource Object section.', link)
-
-        if 'errors' in data:
-            self.fail('JSON API payloads MUST not have both `data` & '
-                      '`errors` top-level keys.', link)
-
-    @staticmethod
-    def conflict(detail, link=None):
-        """ Fail with a ConflictError containing a link """
-
-        exc = ConflictError(detail)
-        exc.link = link
-        raise exc
-
-    @staticmethod
-    def deny(detail, link=None):
-        """ Fail with a PermissionDenied containing a link """
-
-        exc = exceptions.PermissionDenied(detail)
-        exc.link = link
-        raise exc
-
-    @staticmethod
-    def fail(detail, link=None):
-        """ Fail with a ParseError containing a link """
-
-        exc = exceptions.ParseError(detail)
-        exc.link = link
-        raise exc
+        body = super().parse(*args, **kwargs)
+        _validate_jsonschema(body, self.jsonapi_schema)
+        return self.normalizer().normalize(body)

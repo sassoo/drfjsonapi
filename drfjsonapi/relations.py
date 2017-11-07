@@ -6,14 +6,13 @@
     compliant API.
 """
 
-from django.utils.module_loading import import_string
+from django.urls import NoReverseMatch, reverse
 from django.utils.translation import ugettext_lazy as _
 from rest_framework.relations import (
     MANY_RELATION_KWARGS,
     ManyRelatedField,
     PrimaryKeyRelatedField,
 )
-from .utils import _get_resource_url, _get_url
 
 
 class ManyResourceRelatedField(ManyRelatedField):
@@ -44,17 +43,15 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
                             '"{rtype}" resource types are accepted'),
     }
 
-    includable = True
     include = False
     linkage = True
     related_view = None
-    serializer = None
+    rtype = None
 
     def __init__(self, **kwargs):
         """ Process our custom attrs so DRF doesn't barf """
 
-        attrs = ('includable', 'include', 'linkage', 'related_view',
-                 'serializer')
+        attrs = ('include', 'linkage', 'related_view', 'rtype')
         for attr in attrs:
             val = kwargs.pop(attr, getattr(self, attr))
             setattr(self, attr, val)
@@ -80,89 +77,90 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
         # end - this is all ripped from DRF
         return ManyResourceRelatedField(**list_kwargs)
 
-    @property
-    def rtype(self):
-        """ Return the resource type from the relationships serializer """
 
-        return self.get_serializer().get_rtype()
 
-    def get_data(self, rid):
-        """ Return the relationships "Resource Linkage" object
 
-        This should return a dict that is compliant with the
-        "Resource Linkage" section of the JSON API spec. More
-        precisely, the contents of a relationships top level
-        `data` member.
+    def get_data(self, value: str) -> dict:
+        """ Return the relationships top-level `data` object
 
-        Since DRF calls each items `to_representation` method
-        this method follows the "single Resource Identifier
-        Object" section of the spec, only. That means return
-        `None` (JSON API `null`) if the relationship is not set.
+        Also known in the spec as "Resource Identifier" object
+        for a single non-empty object only. This will not be
+        called for empty valued relationships.
 
-        :spec:
-            jsonapi.org/format/#document-resource-object-linkage
-            jsonapi.org/format/#document-resource-identifier-objects
-        """
+        The object looks like:
 
-        if rid:
-            return {
-                'id': str(rid),
-                'meta': self.get_data_meta(rid),
-                'type': self.rtype,
+            {
+                'id': '123',
+                'type': 'actors',
+                'meta': {},
             }
 
-    def get_data_meta(self, rid):
-        """ Return the "Resource Identified Object" meta dict
-
-        Include the absolute URL for convenience of the resource.
-        This, like all meta objects, in the JSON API spec is
-        totally custom.
-
         :spec:
             jsonapi.org/format/#document-resource-identifier-objects
         """
 
-        url = _get_resource_url(self.rtype, rid, self.context)
-        return {'self': url}
+        return {
+            'id': value,
+            'meta': self.get_data_meta(),
+            'type': self.get_data_type(),
+        }
 
-    def get_filtered_queryset(self):
-        """ Use a filtered queyset
+    def get_data_meta(self) -> dict:
+        """ Return the "Resource Identifier" object meta object
 
-        DRF doesn't have a built-in method for passing or
-        providing filters for related fields on a serializer.
-        There are tickets about it & it's left to the app
-        developers currently.
-
-        This method will be called by the parent serializer
-        to be used in view filters prefetches & filters.
+        :spec:
+            jsonapi.org/format/#document-resource-identifier-objects
+            jsonapi.org/format/#document-meta
         """
 
-        return None
+        return {}
 
-    def get_links(self, parent_rid):
-        """ Return the relationships "Links" object
+    def get_data_type(self) -> str:
+        """ Return the "Resource Identifier" type member
 
-        This should return a dict that is compliant with the
-        "Resource Object Relationships" links section of the
-        JSON API spec.
+        :spec:
+            jsonapi.org/format/#document-resource-identifier-objects
+            jsonapi.org/format/#document-resource-object-identification
+        """
+
+        # XXX is self.get_rtype() needed? what context would
+        # it have to alter behavior? it wouldn't know the value
+        # of the field or anything at all about what's being passed through
+        assert type(self.rtype) is str, 'rtype must be a str'
+        return self.rtype
+
+    def get_meta(self) -> dict:
+        """ Return the relationships top-level `meta` object
+
+        :spec:
+            jsonapi.org/format/#document-resource-object-relationships
+            jsonapi.org/format/#document-meta
+        """
+
+        return {}
+
+
+
+
+
+
+    def get_links(self, parent_id: str) -> dict:
+        """ Return the relationships top-level "links" object
 
         Currently, this only returns the `related` key or the
         "Related Resource Links" as cited in the JSON API spec.
-
-        In the future, the "Relationship Link" will be added.
 
         :spec:
             jsonapi.org/format/#document-resource-object-relationships
         """
 
-        data = {}
-        related_url = self.get_links_related(parent_rid)
+        related_url = self.get_links_related(parent_id)
         if related_url:
-            data['related'] = related_url
-        return data
+            return {'related': related_url}
+        return {}
 
-    def get_links_related(self, parent_rid):
-        """ Return the relationships "Related Resource Link" url
+    def get_links_related(self, parent_id: str) -> str:
+        """ Return the relationships "Related Resource Link"
 
         This URL is used to get the relationships resource(s)
         as primary data.
@@ -171,57 +169,19 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
             jsonapi.org/format/#document-resource-object-related-resource-links
         """
 
-        kwargs = {'pk': parent_rid}
-        view = self.get_related_view()
-        return _get_url(view, self.context, kwargs=kwargs)
-
-    def get_meta(self):
-        """ Return the relationships "Meta" object
-
-        This is the relationships top-level meta object & by
-        default nothing except an empty object is returned.
-
-        :spec:
-            jsonapi.org/format/#document-resource-object-relationships
-        """
-
-        return {}
-
-    def get_related_view(self):
-        """ Return the DRF view name for the "Related Resource Link"
-
-        If not provided via the `related_view` property then
-        attempt to auto-determine it. The default view name is:
-
-            <serializer rtype>-<field name>
-
-        An example, of actors serializer with a movies relationship
-        would have a default view name of: `actors-movies`
-        """
-
-        view = self.related_view
-        if not view:
-            try:
-                field = self.field_name
-                rtype = self.parent.get_rtype()
-            except AttributeError:
-                field = self.parent.field_name
-                rtype = self.parent.parent.get_rtype()
-            view = '{rtype}-{field}'.format(field=field, rtype=rtype)
-        return view
-
-    def get_serializer(self, *args, **kwargs):
-        """ Return a serializer instance for the related field
-
-        If a context isn't passed then use the existing one so
-        the serializer is init'd with the request & what not.
-        """
-
         try:
-            kwargs['context'] = kwargs.pop('context', self.context)
-            return import_string(self.serializer)(*args, **kwargs)
-        except ImportError:
+            return reverse(self.related_view, args=[parent_id])
+        except NoReverseMatch:
             return None
+
+
+
+
+
+
+
+
+
 
     def to_internal_value(self, data):
         """ Override DRF PrimaryKeyRelatedField `to_internal_value`
@@ -243,6 +203,12 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
         a 422 because it works better with DRF. This may change.
         """
 
+        # XXX all this should do is pass the rtype to validate_rtype
+        # to make sure it's valid? how would an override know if it's valid?
+        # wouldn't it need to know the id as well so it could look up something?
+        #
+        # it looks like DRF PrimaryKeyRelated will return the instance
+        # natively so that could be passed to determine!!
         try:
             rid, rtype = data['id'], data['type']
             if self.rtype != rtype:
@@ -254,5 +220,14 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
     def to_representation(self, value):
         """ Override DRF PrimaryKeyRelatedField `to_representation` """
 
+        # XXX all this should do is something simple with meta
+        # overrides maybe?
         rid = super().to_representation(value)
-        return self.get_data(rid)
+        if rid is not None:
+            return self.get_data(str(rid))
+
+    def validate_rtype(self, rtype):
+        """ XXX """
+
+        if self.get_rtype() != rtype:
+            self.fail('rtype_conflict', given=rtype, rtype=self.get_rtype())

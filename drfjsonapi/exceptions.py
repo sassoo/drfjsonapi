@@ -8,7 +8,13 @@
 from rest_framework import exceptions
 
 
-class ManyExceptions(exceptions.APIException):
+class JsonApiException(exceptions.APIException):
+    """ For convenient `isinstance` checks or exception handling """
+
+    pass
+
+
+class ManyExceptions(JsonApiException):
     """ Exception that takes a list of other exceptions """
 
     def __init__(self, excs):
@@ -40,7 +46,16 @@ class ManyExceptions(exceptions.APIException):
 """
 
 
-class InvalidQueryParam(exceptions.APIException):
+class InvalidBody(JsonApiException):
+    """ The request has an invalid JSON API payload """
+
+    default_detail = 'Your request had an invalid JSON API payload.'
+    link = 'http://jsonapi.org/format/'
+    status_code = 400
+    title = 'Invalid or corrupt payload'
+
+
+class InvalidQueryParam(JsonApiException):
     """ The request has an invalid query parameter """
 
     default_detail = 'Your request had an invalid query parameter.'
@@ -95,7 +110,7 @@ class InvalidSortParam(InvalidQueryParam):
 """
 
 
-class GenericNotFound(exceptions.APIException):
+class GenericNotFound(JsonApiException):
     """ Generic 404 error """
 
     link = 'https://tools.ietf.org/html/rfc7231#section-6.5.4'
@@ -121,56 +136,12 @@ class RouteNotFound(GenericNotFound):
 
 
 """
-    405 Method Not Allowed
-    ~~~~~~~~~~~~~~~~~~~~~~
-"""
-
-
-class MethodNotAllowed(exceptions.APIException):
-    """ Custom 405 Method Not Allowed error for more info """
-
-    default_detail = 'The "{method}" method is not allowed at that ' \
-                     'endpoint. Only "{allowed_methods}" methods are ' \
-                     'allowed for that endpoint.'
-    link = 'https://tools.ietf.org/html/rfc7231#section-6.5.5'
-    status_code = 405
-    title = 'HTTP method not allowed'
-
-    def __init__(self, request, view, detail=None):
-        """ Initialize the default message """
-
-        if detail is None:
-            detail = self.default_detail.format(
-                allowed_methods=', '.join(view.allowed_methods),
-                method=request.method,
-            )
-        super(MethodNotAllowed, self).__init__(detail)
-
-
-"""
-    406 Not Acceptable
-    ~~~~~~~~~~~~~~~~~~
-"""
-
-
-class NotAcceptable(exceptions.APIException):
-    """ The request requires a supported Accept header """
-
-    default_detail = 'The endpoint requested does not support the mimetype ' \
-                     'specified in your Accept header. You can use */* if ' \
-                     'you want to use auto-negotation.'
-    link = 'https://tools.ietf.org/html/rfc7231#section-6.5.6'
-    status_code = 406
-    title = 'Unacceptable response preference'
-
-
-"""
     409 Conflict
     ~~~~~~~~~~~~
 """
 
 
-class ConflictError(exceptions.APIException):
+class ConflictError(JsonApiException):
     """ The request could not be completed due to a conflict in state """
 
     default_detail = 'Your request had a generic resource conflict.'
@@ -196,30 +167,12 @@ class RtypeConflict(ConflictError):
 
 
 """
-    415 Unsupported Media Type
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~
-"""
-
-
-class UnsupportedMediaType(exceptions.APIException):
-    """ The request requires a supported Content-Type header """
-
-    default_detail = 'The endpoint requested & the HTTP method used ' \
-                     'requires a valid Content-Type header. Unfortunately, ' \
-                     'we couldn\'t find the header in your request or ' \
-                     'the one provided is unsupported.'
-    link = 'https://tools.ietf.org/html/rfc7231#section-6.5.13'
-    status_code = 415
-    title = 'Content-type header missing or unsupported'
-
-
-"""
     422 Unprocessable Entity
     ~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
 
-class ValidationError(exceptions.APIException):
+class ValidationError(JsonApiException):
     """ Custom 422 for handling validation errors """
 
     link = 'https://tools.ietf.org/html/rfc4918#section-11.2'
@@ -267,7 +220,7 @@ class ResourceError(ValidationError):
 """
 
 
-class InternalError(exceptions.APIException):
+class InternalError(JsonApiException):
     """ Something unexpected puked within our API """
 
     default_detail = 'Our service had an unexpected internal error. ' \

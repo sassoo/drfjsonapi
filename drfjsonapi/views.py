@@ -26,11 +26,8 @@ from .exceptions import (
     InvalidPageParam,
     InvalidSortParam,
     ManyExceptions,
-    MethodNotAllowed,
-    NotAcceptable,
     ResourceNotFound,
     RouteNotFound,
-    UnsupportedMediaType,
 )
 from .filters import (
     FieldFilter,
@@ -88,18 +85,12 @@ def jsonapi_exception_handler(exc, context):
 
     if isinstance(exc, Http404):
         exc = ResourceNotFound()
-    elif isinstance(exc, exceptions.MethodNotAllowed):
-        exc = MethodNotAllowed(context['request'], context['view'])
-    elif isinstance(exc, exceptions.NotAcceptable):
-        exc = NotAcceptable()
     elif isinstance(exc, exceptions.NotAuthenticated):
         exc.title = 'Authentication is required'
     elif isinstance(exc, exceptions.ParseError):
         exc.title = 'Invalid or corrupt request body'
     elif isinstance(exc, exceptions.PermissionDenied):
         exc.title = 'Permission denied'
-    elif isinstance(exc, exceptions.UnsupportedMediaType):
-        exc = UnsupportedMediaType()
     elif isinstance(exc, exceptions.ValidationError):
         excs = ManyExceptions([])
         for field, errors in exc.detail.items():
