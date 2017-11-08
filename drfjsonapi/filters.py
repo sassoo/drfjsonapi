@@ -20,7 +20,7 @@ from .exceptions import InvalidIncludeParam, InvalidSortParam
 from .utils import _dict_merge, _reduce_str_to_dict
 
 
-__all__ = ('FieldFilter', 'IncludeFilter', 'OrderingFilter', 'SparseFilter')
+__all__ = ('FieldFilter', 'IncludeFilter', 'OrderingFilter')
 
 
 class JsonApiFilter(object):
@@ -296,102 +296,24 @@ class OrderingFilter(JsonApiFilter, _OrderingFilter):
     ordering_param = 'sort'
     relation_sep = '.'
 
-    def remove_invalid_fields(self, queryset, sorts, view, request):
+    def remove_invalid_fields(self, queryset, fields, view, request):
         """ Override the default to support exception handling """
 
-        allow = [item[0] for item in self.get_valid_fields(queryset, view)]
-        order = []
-
-        if len(sorts) > self.max_sorts:
-            msg = 'Sorting on "%s" fields exceeds the max number of "%s"' \
-                  % (len(sorts), self.max_sorts)
+        if len(fields) > self.max_sorts:
+            msg = 'Sorting on "%s" fields exceeds the maximum number of ' \
+                  '"%s" sortable fields' % (len(fields), self.max_sorts)
             raise InvalidSortParam(msg)
 
-        for sort in sorts:
-            if sort.lstrip('-') in allow:
-                order.append(sort)
-            elif self.relation_sep in sort:
-                msg = 'The "%s" sort query parameter is not allowed ' \
-                      'due to unpredictable results when sorting on ' \
-                      'relationships' % sort
-                raise InvalidSortParam(msg)
-            else:
+        allow = [i[0] for i in self.get_valid_fields(queryset, view)]
+
+        for field in fields:
+            if not field.lstrip('-') in allow:
                 msg = 'The "%s" sort query parameter either does not ' \
-                      'exist or you are not allowed to sort on it' % sort
+                      'exist or you are not allowed to sort on it' % field
+                raise InvalidSortParam(msg)
+            elif self.relation_sep in field:
+                msg = 'The "%s" sort query parameter is not allowed due to ' \
+                      'unpredictable results when sorting on relationships' % field
                 raise InvalidSortParam(msg)
 
-        return order
-
-
-class SparseFilter(JsonApiFilter, BaseFilterBackend):
-    """ Support the limiting of responses to only specific fields
-
-    JSON API details
-    ~~~~~~~~~~~~~~~~
-
-    The JSON API spec reserves the `fields` query parameter for
-    limiting fields that should be returned in the response.
-
-    This filter can be used to support the `fields` query param
-    for requesting only a subset of fields to be returned on a
-    per resource type basis & is JSON API compliant in the
-    following mentionable ways:
-
-        1. The value of the fields parameter MUST be a
-           comma-separated (U+002C COMMA, ",") list that
-           refers to the name(s) of the fields to be returned.
-
-        2. If a client requests a restricted set of fields for
-           a given resource type, an endpoint MUST NOT include
-           additional fields in resource objects of that type
-           in its response.
-
-    Implementation details
-    ~~~~~~~~~~~~~~~~~~~~~~
-
-    Currently, this doesn't do any validation or limiting of
-    the django queryset. Instead, the pruning of fields is
-    done by the serializer.
-
-    We could eventually use something like `defer()` but
-    this could cause performance issues if not done properly.
-    """
-
-    def filter_queryset(self, request, queryset, view):
-        """ DRF entry point into the custom FilterBackend """
-
-        sparse_fields = self.get_sparse_fields(request)
-        request._sparse = sparse_fields
-        return queryset
-
-    def get_sparse_fields(self, request):
-        """ Return the sanitized `fields` query parameters
-
-        Loop through all the query parameters & use a regular
-        expression to find all the fields that match a format
-        of:
-
-            fields[<rtype>]=<value>
-
-        A dict will be generated for each match containing the
-        resource type in the fields query param as the key with
-        a tuple value of fields to limit.
-
-        An example fields of `fields[actors]=name,movies` would
-        return a dict of:
-
-            {'actors': ['name', 'movies', 'id', 'type']}
-
-        The `id` & `type` members are always returned no matter
-        the fields query param.
-        """
-
-        sparse_fields = {}
-        regex = re.compile(r'^fields\[([A-Za-z0-9_]+)\]$')
-
-        for param, val in request.query_params.items():
-            match = regex.match(param)
-            if match:
-                vals = tuple(set(val.split(',') + ['id', 'type']))
-                sparse_fields[match.groups()[0]] = vals
-        return sparse_fields
+        return fields

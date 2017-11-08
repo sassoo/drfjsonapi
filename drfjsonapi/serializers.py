@@ -9,6 +9,7 @@
 """
 
 from django.core.exceptions import ImproperlyConfigured
+from django.urls import NoReverseMatch, reverse
 from rest_framework import exceptions
 from rest_framework import serializers
 from rest_framework.relations import ManyRelatedField
@@ -20,7 +21,6 @@ from .exceptions import (
     RtypeConflict,
 )
 from .relations import ResourceRelatedField
-from .utils import _get_resource_url
 
 
 class IncludeMixin:
@@ -102,22 +102,11 @@ class JsonApiSerializer(IncludeMixin, serializers.Serializer):
             jsonapi.org/format/#document-links
         """
 
-        rtype = self.get_rtype()
-        resource_url = _get_resource_url(rtype, instance.id, self.context)
-        return {'self': resource_url}
-
-    def get_meta(self):
-        """ Return the "Meta" object for an individual resource
-
-        This should return a dict that is compliant with the
-        document meta section of the JSON API spec. Specifically,
-        the links section of an individual "Resource Object".
-
-        :spec:
-            jsonapi.org/format/#document-meta
-        """
-
-        return {}
+        try:
+            rtype = self.get_rtype()
+            return {'self': reverse(rtype + '-detail', args=[instance.pk])}
+        except NoReverseMatch:
+            return {}
 
     def get_relationships(self, data):
         """ Return the "Relationships Object" for a resource
@@ -127,7 +116,7 @@ class JsonApiSerializer(IncludeMixin, serializers.Serializer):
         Specifically, the contents of the top level `relationships`
         member of an individual resource boject.
 
-        Relationships always get top-level links & meta objects
+        Relationships always get top-level links
         but if they have been included or require "Linkage" then
         the "Resource Linkage" is added to the object as well.
 
@@ -138,13 +127,15 @@ class JsonApiSerializer(IncludeMixin, serializers.Serializer):
             jsonapi.org/format/#document-resource-object-relationships
         """
 
+        # XXX get rid of this whole function the related resource
+        # should do this.. except how could it know the parent_rid
+        # that is passed in here?
         includes = self.context.get('includes', {})
         relationships = {}
         for key, field in self.related_fields.items():
             relationship_data = data.pop(key)
             relationships[key] = {
                 'links': field.get_links(data['id']),
-                'meta': field.get_meta(),
             }
             if key in includes or field.linkage:
                 relationships[key].update({'data': relationship_data})
@@ -239,23 +230,6 @@ class JsonApiSerializer(IncludeMixin, serializers.Serializer):
         except exceptions.ValidationError as exc:
             self.process_validation_errors(exc)
 
-    def to_representation_sparse(self):
-        """ Trim fields based on the sparse fields requested
-
-        The JSON API spec uses the resource type (rtype) to
-        qualify which fields should be returned.
-        """
-
-        try:
-            sparse = self.context['sparse']
-            fields = sparse[self.get_rtype()]
-        except (AttributeError, KeyError):
-            return
-
-        for key in self.fields.keys():
-            if key not in fields:
-                del self.fields[key]
-
     def to_representation(self, instance):
         """ DRF override return an individual "Resource Object" object
 
@@ -267,40 +241,15 @@ class JsonApiSerializer(IncludeMixin, serializers.Serializer):
             jsonapi.org/format/#document-resource-objects
         """
 
-        self.to_representation_sparse()
         data = super().to_representation(instance)
 
         return {
             'attributes': data,
             'links': self.get_links(instance),
-            'meta': self.get_meta(),
             'relationships': self.get_relationships(data=data),
             'type': self.get_rtype(),
             'id': data.pop('id'),
         }
-
-    def validate_embedded(self, data, field, serializer_class):
-        """ Validate embedded lists helper method
-
-        A proper ValidationError will be constructed so the
-        JSON pointers reference the list index value where the
-        error occurred.
-
-        This is mostly useful for embedded objects where the django
-        field is a JSONField.
-        """
-
-        errors = {}
-        value = data.get(field, [])  # empty if PATCH
-
-        for idx, item in enumerate(value):
-            serializer = serializer_class(data=item)
-            if not serializer.is_valid():
-                for item_field, error in serializer.errors.items():
-                    errors['%s/%s/%s' % (field, idx, item_field)] = error
-
-        if errors:
-            raise serializers.ValidationError(errors)
 
 
 class JsonApiModelSerializer(JsonApiSerializer, serializers.ModelSerializer):

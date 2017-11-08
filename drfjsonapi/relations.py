@@ -6,6 +6,7 @@
     compliant API.
 """
 
+from django.db import models
 from django.urls import NoReverseMatch, reverse
 from django.utils.translation import ugettext_lazy as _
 from rest_framework.relations import (
@@ -43,7 +44,6 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
                             '"{rtype}" resource types are accepted'),
     }
 
-    include = False
     linkage = True
     related_view = None
     rtype = None
@@ -51,7 +51,7 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
     def __init__(self, **kwargs):
         """ Process our custom attrs so DRF doesn't barf """
 
-        attrs = ('include', 'linkage', 'related_view', 'rtype')
+        attrs = ('linkage', 'related_view', 'rtype')
         for attr in attrs:
             val = kwargs.pop(attr, getattr(self, attr))
             setattr(self, attr, val)
@@ -92,7 +92,6 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
             {
                 'id': '123',
                 'type': 'actors',
-                'meta': {},
             }
 
         :spec:
@@ -101,43 +100,9 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
 
         return {
             'id': value,
-            'meta': self.get_data_meta(),
             'type': self.get_data_type(),
         }
 
-    def get_data_meta(self) -> dict:
-        """ Return the "Resource Identifier" object meta object
-
-        :spec:
-            jsonapi.org/format/#document-resource-identifier-objects
-            jsonapi.org/format/#document-meta
-        """
-
-        return {}
-
-    def get_data_type(self) -> str:
-        """ Return the "Resource Identifier" type member
-
-        :spec:
-            jsonapi.org/format/#document-resource-identifier-objects
-            jsonapi.org/format/#document-resource-object-identification
-        """
-
-        # XXX is self.get_rtype() needed? what context would
-        # it have to alter behavior? it wouldn't know the value
-        # of the field or anything at all about what's being passed through
-        assert type(self.rtype) is str, 'rtype must be a str'
-        return self.rtype
-
-    def get_meta(self) -> dict:
-        """ Return the relationships top-level `meta` object
-
-        :spec:
-            jsonapi.org/format/#document-resource-object-relationships
-            jsonapi.org/format/#document-meta
-        """
-
-        return {}
 
 
 
@@ -154,80 +119,118 @@ class ResourceRelatedField(PrimaryKeyRelatedField):
             jsonapi.org/format/#document-resource-object-relationships
         """
 
-        related_url = self.get_links_related(parent_id)
-        if related_url:
-            return {'related': related_url}
-        return {}
+        try:
+            return {'related': reverse(self.related_view, args=[parent_id])}
+        except NoReverseMatch:
+            return {}
 
-    def get_links_related(self, parent_id: str) -> str:
-        """ Return the relationships "Related Resource Link"
+    def get_attribute(self, instance):
+        """ DRF override XXX """
 
-        This URL is used to get the relationships resource(s)
-        as primary data.
+        # if self.linkage or included?
+        # return get_attribute(instance, self.source_attrs)
+        pass
+
+    def get_rtype(self, instance: models.Model) -> str:
+        """ Return the "Resource Identifier" type member
 
         :spec:
-            jsonapi.org/format/#document-resource-object-related-resource-links
+            jsonapi.org/format/#document-resource-identifier-objects
+            jsonapi.org/format/#document-resource-object-identification
         """
 
-        try:
-            return reverse(self.related_view, args=[parent_id])
-        except NoReverseMatch:
-            return None
+        assert type(self.rtype) is str, 'rtype must be a str'
+        return self.rtype
 
+    def to_internal_value(self, data: dict):
+        """ DRF override during deserialization
 
-
-
-
-
-
-
-
-
-    def to_internal_value(self, data):
-        """ Override DRF PrimaryKeyRelatedField `to_internal_value`
-
-        If the relationship is set then `data` should be a dict
-        containing at a minimum:
+        A JSON API normalized relationship will have the following
+        members at a minimum:
 
             {
-                'id': <id>,
-                'type': self.rtype,
+                'id': '123',
+                'type': 'actors',
             }
-
-        however if the relationship is not set it will simply
-        be None.
-
-        The spec is not clear if a 409 is required when the type
-        doesn't match the expected rtype of the relationship
-        like it is with the primary resource object. We return
-        a 422 because it works better with DRF. This may change.
         """
 
-        # XXX all this should do is pass the rtype to validate_rtype
-        # to make sure it's valid? how would an override know if it's valid?
-        # wouldn't it need to know the id as well so it could look up something?
-        #
-        # it looks like DRF PrimaryKeyRelated will return the instance
-        # natively so that could be passed to determine!!
-        try:
-            rid, rtype = data['id'], data['type']
-            if self.rtype != rtype:
-                self.fail('rtype_conflict', given=rtype, rtype=self.rtype)
-        except (KeyError, TypeError):
-            rid = None
-        return super().to_internal_value(rid)
+        rid, rtype = data['id'], data['type']
+        # raises exc if not found, instance guaranteed
+        instance = super().to_internal_value(rid)
+
+        _rtype = self.get_rtype(instance)
+        if _rtype != rtype:
+            self.fail('rtype_conflict', given=rtype, rtype=_rtype)
+        return instance
+
+
+
+
+
+
 
     def to_representation(self, value):
         """ Override DRF PrimaryKeyRelatedField `to_representation` """
 
-        # XXX all this should do is something simple with meta
-        # overrides maybe?
+        # some how we need the instance but only if linkage=True or included
+        # so get_rtype can have the instance
         rid = super().to_representation(value)
         if rid is not None:
             return self.get_data(str(rid))
 
-    def validate_rtype(self, rtype):
-        """ XXX """
 
-        if self.get_rtype() != rtype:
-            self.fail('rtype_conflict', given=rtype, rtype=self.get_rtype())
+class ProcessorRelatedField:
+    queryset = Processor.objects.all()
+
+    def get_rtype(self, instance):
+        return '%s-processors' % instance.vendor
+
+
+
+class ResourceIdentifierField:
+    def get_attribute(self, instance):
+        """ DRF override XXX """
+
+        # if self.linkage or included?
+        # return get_attribute(instance, self.source_attrs)
+        pass
+
+    def get_rtype(self, instance: models.Model) -> str:
+        """ Return the "Resource Identifier" type member
+
+        :spec:
+            jsonapi.org/format/#document-resource-identifier-objects
+            jsonapi.org/format/#document-resource-object-identification
+        """
+
+        assert type(self.rtype) is str, 'rtype must be a str'
+        return self.rtype
+
+    def to_internal_value(self, data: dict):
+        """ DRF override during deserialization
+
+        XXX Pass in the data as a resource identifier object:
+
+            {
+                'id': '123',
+                'type': 'actors',
+            }
+        """
+
+        rid, rtype = data['id'], data['type']
+        # raises exc if not found, instance guaranteed
+        instance = super().to_internal_value(rid)
+
+        _rtype = self.get_rtype(instance)
+        if _rtype != rtype:
+            self.fail('rtype_conflict', given=rtype, rtype=_rtype)
+        return instance
+
+    def to_representation(self, value):
+        """ Override DRF PrimaryKeyRelatedField `to_representation` """
+
+        # some how we need the instance but only if linkage=True or included
+        # so get_rtype can have the instance
+        rid = super().to_representation(value)
+        if rid is not None:
+            return self.get_data(str(rid))

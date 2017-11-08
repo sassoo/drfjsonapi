@@ -13,8 +13,6 @@ from django.utils.crypto import get_random_string
 from django.http import Http404
 from rest_framework import exceptions
 from rest_framework.decorators import api_view
-from rest_framework.parsers import JSONParser
-from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 from .exceptions import (
@@ -33,7 +31,6 @@ from .filters import (
     FieldFilter,
     IncludeFilter,
     OrderingFilter,
-    SparseFilter,
 )
 from .filtersets import JsonApiFilterSet
 from .renderers import JsonApiRenderer
@@ -124,11 +121,10 @@ class JsonApiViewMixin:
     enabled on the view, via this modules filter_backends.
     """
 
-    filter_backends = (FieldFilter, IncludeFilter, OrderingFilter,
-                       SparseFilter)
+    filter_backends = (FieldFilter, IncludeFilter, OrderingFilter)
     pagination_class = LimitOffsetPagination
-    parser_classes = (JsonApiParser, JSONParser)
-    renderer_classes = (JsonApiRenderer, JSONRenderer)
+    parser_classes = (JsonApiParser)
+    renderer_classes = (JsonApiRenderer)
 
     def _get_related_view(self, view_name, action, kwargs=None):
         """ Return the related view instance & check global perms """
@@ -157,7 +153,6 @@ class JsonApiViewMixin:
 
         context = super().get_serializer_context()
         context['includes'] = getattr(self.request, '_includes', {}).keys()
-        context['sparse'] = getattr(self.request, '_sparse', {})
         return context
 
     def initialize_request(self, request, *args, **kwargs):
@@ -169,7 +164,7 @@ class JsonApiViewMixin:
         )
 
         for param in request.query_params.keys():
-            if param.startswith('fields[') and SparseFilter not in filters:
+            if param.startswith('fields['):
                 msg = '"field" query parameters are not supported'
                 raise InvalidFieldParam(msg)
             elif param.startswith('filter[') and FieldFilter not in filters:

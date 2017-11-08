@@ -7,8 +7,6 @@
 
 from functools import reduce
 from django.core.exceptions import ObjectDoesNotExist
-from django.core.urlresolvers import NoReverseMatch
-from rest_framework.reverse import reverse
 
 
 def _dict_merge(master, new):
@@ -53,26 +51,6 @@ def _get_related_field(model, field_name):
         return None
     except AttributeError:
         return getattr(model, field_name)
-
-
-def _get_resource_url(rtype, rid, context):
-    """ Return the absolute URL of a single resource """
-
-    return _get_url('%s-detail' % rtype, context, kwargs={'pk': rid})
-
-
-def _get_url(view_name, context, kwargs=None):
-    """ Return the absolute URL given a view name & optional kwargs """
-
-    try:
-        return reverse(
-            view_name,
-            format=context.get('format_kwarg', None),
-            kwargs=kwargs,
-            request=context.get('request', None),
-        )
-    except NoReverseMatch:
-        return None
 
 
 def _reduce_str_to_dict(field, val=None, sep='__'):

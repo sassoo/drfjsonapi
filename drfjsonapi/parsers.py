@@ -23,10 +23,10 @@ from .schema import (
 )
 
 
-def _validate_jsonschema(data: dict, schema: dict) -> None:
+def _validate_body(body: dict, schema: dict) -> None:
     """ Raise an InvalidBody exception if non-compliant with the spec """
 
-    errors = Draft4Validator(schema).iter_errors(data)
+    errors = Draft4Validator(schema).iter_errors(body)
     error = best_match(errors)
     if error:
         exc = InvalidBody(error.message)
@@ -39,7 +39,7 @@ def _validate_jsonschema(data: dict, schema: dict) -> None:
 class JsonApiRelationshipNormalizer:
     """ Normalize a JSON API relationship update compliant payload """
 
-    def normalize(self, data):
+    def normalize(self, body: dict) -> dict:
         """ Entry point from the parser
 
         XXX FINISH
@@ -61,7 +61,7 @@ class JsonApiRelationshipParser(JSONParser):
         """ DRF entry point """
 
         body = super().parse(*args, **kwargs)
-        _validate_jsonschema(body, self.jsonapi_schema)
+        _validate_body(body, self.jsonapi_schema)
         return self.normalizer().normalize(body)
 
 
@@ -96,5 +96,5 @@ class JsonApiResourceParser(JSONParser):
         """ DRF entry point """
 
         body = super().parse(*args, **kwargs)
-        _validate_jsonschema(body, self.jsonapi_schema)
+        _validate_body(body, self.jsonapi_schema)
         return self.normalizer().normalize(body)
