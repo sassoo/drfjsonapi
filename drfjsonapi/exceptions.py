@@ -18,7 +18,7 @@ class ManyExceptions(JsonApiException):
     """ Exception that takes a list of other exceptions """
 
     def __init__(self, excs):
-        super(ManyExceptions, self).__init__()
+        super().__init__()
         self.excs = excs
 
     @property
@@ -163,7 +163,7 @@ class RtypeConflict(ConflictError):
         """ Initialize the default message """
 
         detail = self.default_detail.format(given=given, rtype=rtype)
-        super(RtypeConflict, self).__init__(detail)
+        super().__init__(detail)
 
 
 """
@@ -192,7 +192,7 @@ class FieldError(ValidationError):
             self.source = {'pointer': field}
         else:
             self.source = {'pointer': '/data/attributes/%s' % field}
-        super(FieldError, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
 
 class RelationshipError(ValidationError):
@@ -204,7 +204,7 @@ class RelationshipError(ValidationError):
         """ Initialize the default message """
 
         self.source = {'pointer': '/data/relationships/%s' % field}
-        super(RelationshipError, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
 
 class ResourceError(ValidationError):

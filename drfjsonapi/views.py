@@ -35,7 +35,7 @@ from .filters import (
 from .filtersets import JsonApiFilterSet
 from .renderers import JsonApiRenderer
 from .pagination import JsonApiPagination, LimitOffsetPagination
-from .parsers import JsonApiParser
+from .parsers import JsonApiResourceParser
 from .status_codes import status_codes
 
 
@@ -123,7 +123,7 @@ class JsonApiViewMixin:
 
     filter_backends = (FieldFilter, IncludeFilter, OrderingFilter)
     pagination_class = LimitOffsetPagination
-    parser_classes = (JsonApiParser)
+    parser_classes = (JsonApiResourceParser)
     renderer_classes = (JsonApiRenderer)
 
     def _get_related_view(self, view_name, action, kwargs=None):

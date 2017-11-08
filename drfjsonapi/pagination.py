@@ -134,7 +134,7 @@ class LimitOffsetPagination(JsonApiPagination, _LimitOffsetPagination):
         create a pager top-level object with links & meta.
         """
 
-        resp = super(LimitOffsetPagination, self).get_paginated_response(data)
+        resp = super().get_paginated_response(data)
         resp.data['pager'] = {
             'links': {
                 'first': self.get_first_link(),

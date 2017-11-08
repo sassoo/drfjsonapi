@@ -112,7 +112,7 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
            would be 3 relations.
 
         2. Be listed in the serializers `get_includables`
-           or `get_default_includables` methods
+           method
 
         3. Return a serializer when calling the serializers
            `get_related_serializer` method.
@@ -126,11 +126,6 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
     to the primary datasets queryset for efficiency. You can also
     override the default Prefetch's queryset by returning one
     from the serializers `get_related_queryset` method.
-
-    Finally, if no includes are provided in the query param
-    then any fields returned from the `get_default_includables`
-    method on the serializer will be automatically prefeteched &
-    included.
     """
 
     max_includes = 25
@@ -156,8 +151,6 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
         includes = self.get_query_includes(request)
         if includes:
             self.validate_includes(includes, serializer)
-        else:
-            self.process_default_includes(serializer)
 
         queryset = queryset.prefetch_related(*self.get_prefetches())
         request._includes = self._get_cache()
@@ -203,17 +196,6 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
         includes = [include.split(',') for include in includes]
         includes = list(itertools.chain(*includes))
         return tuple(set(includes))
-
-    def process_default_includes(self, serializer):
-        """ Include all of the default fields
-
-        This should look for related fields with default
-        includes BUT only if none were specified through
-        an include query parameter per the JSON API spec.
-        """
-
-        for field in serializer.get_default_includables():
-            self._update_cache(field, serializer)
 
     def validate_includes(self, includes, serializer):
         """ Validate all the sanitized includeed query parameters """
