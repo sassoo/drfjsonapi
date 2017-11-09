@@ -36,7 +36,7 @@ from .filtersets import JsonApiFilterSet
 from .renderers import JsonApiRenderer
 from .pagination import JsonApiPagination, LimitOffsetPagination
 from .parsers import JsonApiResourceParser
-from .status_codes import status_codes
+from .status_codes import STATUS_CODES
 
 
 def _get_error(exc):
@@ -45,7 +45,7 @@ def _get_error(exc):
     return {
         'id': get_random_string(),
         'links': {'about': getattr(exc, 'link', '')},
-        'status': status_codes[exc.status_code],
+        'status': STATUS_CODES[exc.status_code],
         'code': getattr(exc, 'code', exc.__class__.__name__),
         'title': getattr(exc, 'title', ''),
         'detail': getattr(exc, 'detail', ''),

@@ -5,8 +5,7 @@
     HTTP status map for numeric to logic translation
 """
 
-# pylint: disable=invalid-name
-status_codes = {
+STATUS_CODES = {
     400: '400 Bad Request',
     401: '401 Unauthorized',
     402: '402 Payment Required',

@@ -23,7 +23,7 @@ class ResourceRelatedField(SlugRelatedField):
         """ Process our custom attrs so DRF doesn't barf """
 
         self.rtype = kwargs.pop('rtype', None)
-        super().__init__(**kwargs)
+        super().__init__(slug_field=slug_field, **kwargs)
 
     def get_rtype(self, instance: models.Model) -> str:
         """ Return the "Resource Identifier" type member
@@ -67,10 +67,3 @@ class ResourceRelatedField(SlugRelatedField):
             'id': str(super().to_representation(obj)),
             'type': self.get_rtype(obj),
         }
-
-
-# class ProcessorRelatedField:
-#     queryset = Processor.objects.all()
-
-#     def get_rtype(self, instance):
-#         return '%s-processors' % instance.vendor
