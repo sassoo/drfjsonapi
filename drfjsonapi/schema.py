@@ -93,12 +93,12 @@ DEFINITIONS = {
     'resourceIdentifier': {
         'description': 'JSON API resource identifier objects MUST be a JSON '
                        'object containing the required "id" & "type" members '
-                       '& string values',
+                       'with string values',
         'uri': 'http://jsonapi.org/format/#document-resource-identifier-objects',
         'type': 'object',
         'required': [
             'id',
-            'type'
+            'type',
         ],
         'properties': {
             'type': {
@@ -128,11 +128,10 @@ DEFINITIONS = {
 
     'resourceObject': {
         'description': 'JSON API resource objects MUST be a JSON object containing '
-                       'the required "id" & "type" members & string values',
+                       'the top-level "id" & "type" members with string values',
         'uri': 'http://jsonapi.org/format/#document-resource-objects',
         'type': 'object',
         'required': [
-            'id',
             'type',
         ],
         'properties': {
@@ -157,17 +156,14 @@ DEFINITIONS = {
 
     'resourceObjectAttributes': {
         'description': 'JSON API resource object "attributes" member MUST be a '
-                       'JSON object.',
+                       'JSON object. Its members MUST not contain any top-level '
+                       'reserved names ("links", "relationships", "id", "type") '
+                       'or names incompliant incompliant with the JSON API member'
+                       'names section',
         'uri': 'http://jsonapi.org/format/#document-resource-object-attributes',
         'type': 'object',
         'patternProperties': {
-            '^(?!relationships$|links$|id$|type$)\\w[-\\w_]*$': {
-                'description': 'JSON API resource object "attributes" MUST not '
-                               'contain any top-level reserved names ("links", '
-                               '"relationships", "id", "type") or names incompliant '
-                               'incompliant with the JSON API member names section',
-                'uri': 'http://jsonapi.org/format/#document-resource-object-attributes',
-            },
+            '^(?!relationships$|links$|id$|type$)\\w[-\\w_]*$': {},
         },
         'additionalProperties': False,
     },

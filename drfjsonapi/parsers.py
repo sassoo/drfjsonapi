@@ -62,7 +62,7 @@ class JsonApiRelationshipParser(JSONParser):
 
         body = super().parse(*args, **kwargs)
         _validate_body(body, self.jsonapi_schema)
-        return self.normalizer().normalize(body)
+        return self.jsonapi_normalizer().normalize(body)
 
 
 class JsonApiResourceNormalizer:
@@ -75,7 +75,11 @@ class JsonApiResourceNormalizer:
         serializers work as expected.
         """
 
-        data = body['data'].get('attributes', {})
+        data = {
+            'id': body['data'].get('id'),
+            'type': body['data']['type'],
+        }
+        data.update(body['data'].get('attributes', {}))
         data.update({
             k: v['data']
             for k, v in body['data'].get('relationships', {}).items()
@@ -97,4 +101,4 @@ class JsonApiResourceParser(JSONParser):
 
         body = super().parse(*args, **kwargs)
         _validate_body(body, self.jsonapi_schema)
-        return self.normalizer().normalize(body)
+        return self.jsonapi_normalizer().normalize(body)

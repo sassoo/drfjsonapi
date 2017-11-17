@@ -47,12 +47,12 @@ class ManyExceptions(JsonApiException):
 
 
 class InvalidBody(JsonApiException):
-    """ The request has an invalid JSON API payload """
+    """ The request has an invalid JSON API request body """
 
-    default_detail = 'Your request had an invalid JSON API payload.'
+    default_detail = 'Your request had an invalid JSON API request body.'
     link = 'http://jsonapi.org/format/'
     status_code = 400
-    title = 'Invalid or corrupt payload'
+    title = 'Invalid or corrupt request body'
 
 
 class InvalidQueryParam(JsonApiException):

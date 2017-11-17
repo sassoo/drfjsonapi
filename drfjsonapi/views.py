@@ -123,8 +123,8 @@ class JsonApiViewMixin:
 
     filter_backends = (FieldFilter, IncludeFilter, OrderingFilter)
     pagination_class = LimitOffsetPagination
-    parser_classes = (JsonApiResourceParser)
-    renderer_classes = (JsonApiRenderer)
+    parser_classes = (JsonApiResourceParser,)
+    renderer_classes = (JsonApiRenderer,)
 
     def _get_related_view(self, view_name, action, kwargs=None):
         """ Return the related view instance & check global perms """
