@@ -19,15 +19,6 @@ class JsonApiRenderer(JSONRenderer):
 
     media_type = 'application/vnd.api+json'
 
-    def get_errors(self, data):
-        """ Return an array of "Error" objects
-
-        :spec:
-            jsonapi.org/format/#errors
-        """
-
-        return data
-
     # pylint: disable=too-many-arguments
     def _get_include(self, fields, model, include_table):
         """ Populate the included table for future processing
@@ -115,10 +106,8 @@ class JsonApiRenderer(JSONRenderer):
                 included.append(val)
         return included
 
-    def get_jsonapi(self):
+    def get_jsonapi(self) -> dict:
         """ Return the top level "JSON API" object
-
-        Only the `version` member is valid.
 
         :spec:
             jsonapi.org/format/#document-jsonapi-object
@@ -126,7 +115,7 @@ class JsonApiRenderer(JSONRenderer):
 
         return {'version': '1.0'}
 
-    def get_links(self, request, pager):
+    def get_links(self, request, pager: dict) -> dict:
         """ Return the top level "Links" object
 
         According to the JSON API spec this should include
@@ -142,43 +131,13 @@ class JsonApiRenderer(JSONRenderer):
             links.update(pager['links'])
         return links
 
-    def get_meta(self, pager):
-        """ Return the top level "Meta" object
-
-        We include some helpful counters from the pagination
-        results otherwise it's empty.
-        """
-
-        return pager.get('meta', {})
-
-    def get_top_level(self, data, request, pager):
-        """ Return the "Top Level" object of the resource(s)
-
-        This should return a dict that is compliant with the
-        "Top Level" section of the JSON API spec.
-
-        :spec:
-            jsonapi.org/format/#document-top-level
-        """
-
-        return {
-            'data': data,
-            'included': self.get_included(data, request),
-            'jsonapi': self.get_jsonapi(),
-            'links': self.get_links(request, pager),
-            'meta': self.get_meta(pager),
-        }
-
     def render(self, data, accepted_media_type=None, renderer_context=None):
-        """ DRF entry point
+        """ DRF override & entry point
 
-        `data` can be quite a few different data formats
-        unforutnately. It could be a single resource dict,
-        None (no single resource), an array of many resource
-        dicts with paging info, an empty array, or an "Errors"
-        object.
-
-        This should be handled better somehow I'd imagine.
+        `data` can be quite a few different data formats unforutnately.
+        It could be a single resource dict, None (no single resource),
+        an array of many resource dicts with paging info, an empty array,
+        or an "Errors" object.
         """
 
         pager = {}
@@ -189,15 +148,15 @@ class JsonApiRenderer(JSONRenderer):
             pager = data['pager']
             data = data['results']
 
-        if not data:
-            data = self.get_top_level(data, request, pager)
-        elif 'errors' in data:
-            data = self.get_errors(data)
+        if data and 'errors' in data:
+            body = data
         else:
-            data = self.get_top_level(data, request, pager)
+            body = {
+                'data': data,
+                'included': self.get_included(data, request),
+                'jsonapi': self.get_jsonapi(),
+                'links': self.get_links(request, pager),
+                'meta': pager.get('meta', {}),
+            }
 
-        return super(JsonApiRenderer, self).render(
-            data,
-            accepted_media_type,
-            renderer_context,
-        )
+        return super().render(body, accepted_media_type, renderer_context)

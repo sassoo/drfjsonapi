@@ -15,7 +15,7 @@ class JsonApiFilterSet:
     """ This should be subclassed by custom FilterSets """
 
     filterable_fields = {}
-    max_filters = 25
+    max_filters = 15
 
     def __init__(self, context=None):
         """ Context will include the request & view """
@@ -35,14 +35,6 @@ class JsonApiFilterSet:
             ret.add(self.get_filter_expression(param, value), Q.AND)
         return ret
 
-    def get_filter_validator(self, field):
-        """ Return the fields filter validators """
-
-        try:
-            return self.filterable_fields[field]
-        except (KeyError, TypeError):
-            return None
-
     def to_internal_value(self, data):
         """ Coerce & validate the query params & values """
 
@@ -52,10 +44,7 @@ class JsonApiFilterSet:
                   % (len(data), self.max_filters)
             raise InvalidFilterParam(msg)
 
-        ret = {}
-        for param, value in data.items():
-            ret[param] = self.validate_filter(param, value)
-        return ret
+        return {k: self.validate_filter(k, v) for k, v in data.items()}
 
     def validate(self, data):
         """ Hook to validate the coerced data """
@@ -69,9 +58,9 @@ class JsonApiFilterSet:
         field, _, lookup = param.rpartition('__')
 
         try:
-            validator = self.get_filter_validator(field)
+            validator = self.filterable_fields[field]
             return validator.validate(lookup, value)
-        except (AttributeError, KeyError):
+        except KeyError:
             msg = 'The "%s" filter query parameter is invalid, the ' \
                   '"%s" field either does not exist on the requested ' \
                   'resource or you are not allowed to filter on it.' \

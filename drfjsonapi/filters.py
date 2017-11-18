@@ -9,15 +9,12 @@
 import itertools
 import re
 
-from collections import OrderedDict
 from django.core.exceptions import ImproperlyConfigured
-from django.db.models.query import Prefetch
 from rest_framework.filters import (
     BaseFilterBackend,
     OrderingFilter as _OrderingFilter,
 )
 from .exceptions import InvalidIncludeParam, InvalidSortParam
-from .utils import _dict_merge, _reduce_str_to_dict
 
 
 __all__ = ('FieldFilter', 'IncludeFilter', 'OrderingFilter')
@@ -97,93 +94,29 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
     """ Support the include of compound documents
 
     The `filter_queryset` entry point method requires the view
-    provided to have a `get_serializer` method & that MUST return
-    a serializer instance.
+    provided to have a `get_includes` method & that MUST return
+    a dict of includable field names & serializers.
 
-    That serializer will be used to validate the `include` query
-    param values. If the global `max_includes` property limit
-    is not exceeded then each include is tested for eligibility.
-
-    For an include to be eligible it MUST meet all of the
-    following criteria:
-
-        1. Not exceed the `max_relations` limit of nested
-           includes. For example, '?include=foo.bar.baz'
-           would be 3 relations.
-
-        2. Be listed in the serializers `get_includables`
-           method
-
-        3. Return a serializer when calling the serializers
-           `get_related_serializer` method.
-
-    Each individual relation in an include will be validated
-    according to steps 2-3. An include of 'actor.movies' for
-    instance would have both 'actor' & 'movies' vetted against
-    steps 2-3 by walking the chain of related serializers.
+    If the global `max_includes` property limit is not exceeded
+    then each include is tested for eligibility which simply
+    means being present as a key in the return of `get_includes`
+    on the view.
 
     All vetted includes will then have prefetching logic attached
-    to the primary datasets queryset for efficiency. You can also
-    override the default Prefetch's queryset by returning one
-    from the serializers `get_related_queryset` method.
+    to the primary datasets queryset for efficiency.
     """
 
-    max_includes = 25
-    max_relations = 3
-
-    def __init__(self):
-        """ The superclass doesn't have an __init__ defined """
-
-        self._cache = OrderedDict()
+    max_includes = 15
 
     def filter_queryset(self, request, queryset, view):
         """ DRF entry point into the custom FilterBackend """
 
-        try:
-            serializer = view.get_serializer()
-            if not serializer:
-                raise AttributeError
-        except AttributeError:
-            msg = 'Using "%s" requires a view that returns a ' \
-                  'serializer from "get_serializer()"'
-            raise ImproperlyConfigured(msg % self.__class__.__name__)
-
         includes = self.get_query_includes(request)
         if includes:
-            self.validate_includes(includes, serializer)
-
-        queryset = queryset.prefetch_related(*self.get_prefetches())
-        request._includes = self._get_cache()
+            self.validate_includes(includes)
+            queryset = queryset.prefetch_related(*includes)
+            request._includes = includes  # pylint: disable=protected-access
         return queryset
-
-    def _get_cache(self):
-        """ Generate a cache for later processing by the renderer """
-
-        cache = {}
-        for key, val in self._cache.items():
-            _dict = _reduce_str_to_dict(key, val)
-            _dict_merge(cache, _dict)
-        return cache
-
-    def _update_cache(self, field, serializer, path=None):
-        """ Add an entry to the include_cache
-
-        Order is important with django & that's why an
-        OrderedDict is used. This will call the fields
-        `get_related_queryset` method for extra filtering.
-        """
-
-        path = path or field
-        queryset = serializer.get_related_queryset(field)
-        self._cache[path] = {
-            'prefetch': Prefetch(path, queryset=queryset),
-            'serializer': serializer.get_related_serializer(field),
-        }
-
-    def get_prefetches(self):
-        """ Return the list of generated Prefetch objects """
-
-        return [value.pop('prefetch') for value in self._cache.values()]
 
     def get_query_includes(self, request):
         """ Return the sanitized `include` query parameters
@@ -197,7 +130,7 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
         includes = list(itertools.chain(*includes))
         return tuple(set(includes))
 
-    def validate_includes(self, includes, serializer):
+    def validate_includes(self, includes):
         """ Validate all the sanitized includeed query parameters """
 
         if len(includes) > self.max_includes:
@@ -205,34 +138,6 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
                   'compound documents exceeding the max number of "%s"' \
                   % (len(includes), self.max_includes)
             raise InvalidIncludeParam(msg)
-
-        for include in includes:
-            self.validate_include(include, serializer)
-
-    def validate_include(self, include, serializer):
-        """ Validate each included query param individually
-
-        Walk the serializers for deeply nested include requests
-        to ensure they are allowed to be includeed.
-        """
-
-        relations = include.split('.')
-        if len(relations) > self.max_relations:
-            msg = 'The "%s" include query parameter exceeds the max' \
-                  'relations limit of "%s"' % (include, self.max_relations)
-            raise InvalidIncludeParam(msg)
-
-        for idx, relation in enumerate(relations):
-            related_path = '__'.join(relations[:idx + 1])
-
-            if not serializer or relation not in serializer.get_includables():
-                msg = 'The "%s" include query parameter requested is ' \
-                      'either an invalid field or not allowed to be ' \
-                      'included' % include
-                raise InvalidIncludeParam(msg)
-
-            self._update_cache(relation, serializer, related_path)
-            serializer = serializer.get_related_serializer(relation)
 
 
 class OrderingFilter(JsonApiFilter, _OrderingFilter):
