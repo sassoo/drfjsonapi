@@ -1,6 +1,13 @@
 """ XXX """
 
 DEFINITIONS = {
+    'links': {
+        'description': 'JSON API "links" member, when used MUST be a JSON object '
+                       'whose members MUST contain valid JSON',
+        'uri': 'http://jsonapi.org/format/#document-meta',
+        'type': 'object',
+        'additionalProperties': True,
+    },
     'meta': {
         'description': 'JSON API "meta" member, when used MUST be a JSON object '
                        'whose members MUST contain valid JSON',
@@ -8,7 +15,6 @@ DEFINITIONS = {
         'type': 'object',
         'additionalProperties': True,
     },
-
     'relationshipLinkage': {
         'description': 'JSON API relationship resource linkages MUST be a JSON '
                        'object with a required "data" member representing the '
@@ -43,7 +49,6 @@ DEFINITIONS = {
         },
         'additionalProperties': False,
     },
-
     'relationshipToMany': {
         'description': 'JSON API to-many relationships should be an empty array '
                        '([]) or an array of objects each containing "type" and '
@@ -55,7 +60,6 @@ DEFINITIONS = {
         },
         'uniqueItems': True,
     },
-
     'relationshipToOne': {
         'description': 'JSON API to-one relationships should be null or a single '
                        'object containing "type" and "id" members representing a '
@@ -70,7 +74,6 @@ DEFINITIONS = {
             {'type': 'null'},
         ],
     },
-
     'resource': {
         'description': 'JSON API resource objects MUST be a JSON object with '
                        'a required "data" member representing the primary data.',
@@ -89,7 +92,6 @@ DEFINITIONS = {
         },
         'additionalProperties': False,
     },
-
     'resourceIdentifier': {
         'description': 'JSON API resource identifier objects MUST be a JSON '
                        'object containing the required "id" & "type" members '
@@ -113,19 +115,16 @@ DEFINITIONS = {
         },
         'additionalProperties': False,
     },
-
     'resourceIdentifierId': {
         'description': 'JSON API resource identifier "id" member MUST be a string',
         'uri': 'http://jsonapi.org/format/#document-resource-object-identification',
         'type': 'string',
     },
-
     'resourceIdentifierType': {
         'description': 'JSON API resource identifier "type" member MUST be a string',
         'uri': 'http://jsonapi.org/format/#document-resource-object-identification',
         'type': 'string',
     },
-
     'resourceObject': {
         'description': 'JSON API resource objects MUST be a JSON object containing '
                        'the top-level "id" & "type" members with string values',
@@ -135,11 +134,11 @@ DEFINITIONS = {
             'type',
         ],
         'properties': {
-            'type': {
-                '$ref': '#/definitions/resourceIdentifierType',
-            },
             'id': {
                 '$ref': '#/definitions/resourceIdentifierId',
+            },
+            'type': {
+                '$ref': '#/definitions/resourceIdentifierType',
             },
             'attributes': {
                 '$ref': '#/definitions/resourceObjectAttributes',
@@ -147,13 +146,15 @@ DEFINITIONS = {
             'relationships': {
                 '$ref': '#/definitions/resourceObjectRelationships',
             },
+            'links': {
+                '$ref': '#/definitions/links',
+            },
             'meta': {
                 '$ref': '#/definitions/meta',
             },
         },
         'additionalProperties': False,
     },
-
     'resourceObjectAttributes': {
         'description': 'JSON API resource object "attributes" member MUST be a '
                        'JSON object. Its members MUST not contain any top-level '
@@ -167,7 +168,6 @@ DEFINITIONS = {
         },
         'additionalProperties': False,
     },
-
     'resourceObjectRelationships': {
         'description': 'JSON API resource object "relationships" member MUST be a '
                        'JSON object.',

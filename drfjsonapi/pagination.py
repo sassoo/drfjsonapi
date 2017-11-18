@@ -63,7 +63,6 @@ class LimitOffsetPagination(JsonApiPagination, _LimitOffsetPagination):
     max_limit = float('inf')
     limit_query_param = 'page[limit]'
     offset_query_param = 'page[offset]'
-    strict_mode = True
 
     def get_first_link(self):
         """ Return the URL of the first paginated page """
@@ -103,11 +102,10 @@ class LimitOffsetPagination(JsonApiPagination, _LimitOffsetPagination):
         except TypeError:
             pass
         except ValueError:
-            if self.strict_mode:
-                msg = 'The "%s" query param must be a positive number ' \
-                      'greater than 0 but less than the max of %s' \
-                      % (self.limit_query_param, self.max_limit)
-                raise InvalidPageParam(msg)
+            msg = 'The "%s" query param must be a positive number ' \
+                  'greater than 0 but less than the max of %s' \
+                  % (self.limit_query_param, self.max_limit)
+            raise InvalidPageParam(msg)
 
         return limit
 
@@ -120,10 +118,9 @@ class LimitOffsetPagination(JsonApiPagination, _LimitOffsetPagination):
             if offset < 0:
                 raise ValueError
         except ValueError:
-            if self.strict_mode:
-                msg = 'The "%s" query param must be a positive number ' \
-                      'greater than 0' % self.offset_query_param
-                raise InvalidPageParam(msg)
+            msg = 'The "%s" query param must be a positive number ' \
+                  'greater than 0' % self.offset_query_param
+            raise InvalidPageParam(msg)
 
         return offset
 

@@ -1,6 +1,6 @@
 """
     drfjsonapi.serializers
-    ~~~~~~~~~~~~~~~~~~~~~~~
+    ~~~~~~~~~~~~~~~~~~~~~~
 
     DRF serializers to assist with a JSON API spec compliant API.
 
@@ -22,78 +22,33 @@ from .exceptions import (
 from .relations import ResourceRelatedField
 
 
-class IncludeMixin:
-    """ Helpers for handling the include query param
-
-    This supports maximum flexibility by relying on the
-    relationship fields for included related directives
-    so they can be encapsulated & reused while also
-    allowing serializers to override if needed.
-
-    The FilterBackends never know anything about the
-    underlying relationship fields. Everything is
-    proxied through this simple serializer mixin.
-    """
-
-    def get_includables(self):
-        """ Return includable related field names """
-
-        return [k for k, v in self._related_fields.items() if v.includable]
-
-    def get_related_queryset(self, field):
-        """ Get the optional filtered queryset for the relationship """
-
-        try:
-            related_field = self._related_fields[field]
-            return related_field.get_filtered_queryset()
-        except (AttributeError, KeyError):
-            return None
-
-    def get_related_serializer(self, field):
-        """ Return the default related field names to include
-
-        This is only used if the requestor did not explicitly
-        request includes per the JSON API spec.
-        """
-
-        try:
-            related_field = self._related_fields[field]
-            return related_field.get_serializer(context=self.context)
-        except (AttributeError, KeyError):
-            return None
-
-
 class JsonApiSerializerMixin:
     """ JSON API Serializer mixin """
 
     serializer_related_field = ResourceRelatedField
 
-    @property
-    def _related_fields(self):
-        """ Return `self.fields` but limited to relationship fields """
+    def __init__(self, *args, **kwargs):
+        """ Create a backup of the relationship field names """
 
-        fields = {}
-        for name, field in self.fields.items():
-            if field.write_only:
-                continue
-            elif isinstance(field, ManyRelatedField):
-                fields[name] = field.child_relation
-            elif isinstance(field, ResourceRelatedField):
-                fields[name] = field
-        return fields
+        super().__init__(*args, **kwargs)
+
+        self.related_field_names = [
+            name for name, field in self.fields.items()
+            if isinstance(field, (ResourceRelatedField, ManyRelatedField))
+        ]
 
     @property
-    def rtype(self):
+    def rtype(self) -> str:
         """ Return the string resource type as referenced by JSON API """
 
         try:
             return self.Meta.rtype
         except AttributeError:
             msg = '"%s" must have a `Meta.rtype` attribute representing ' \
-                  'the JSON APIo resource type`' % self.__class__.__name__
+                  'the JSON API resource type`' % self.__class__.__name__
             raise ImproperlyConfigured(msg)
 
-    def _get_relationships(self, data):
+    def _get_relationships(self, data: dict) -> dict:
         """ Return the "Relationships Object" for a resource
 
         Relationships always get top-level links but if they have
@@ -105,15 +60,15 @@ class JsonApiSerializerMixin:
         """
 
         relationships = {}
-        for key in self._related_fields:
-            related_view = '%s-%s' % (self.rtype, key)
-            relationships[key] = {
+        for name in self.related_field_names:
+            related_view = '%s-%s' % (self.rtype, name)
+            relationships[name] = {
                 'links': {
-                    'related': reverse(related_view, args=(data['id']))
+                    'related': reverse(related_view, args=(data['id'],))
                 },
             }
-            if key in data:
-                relationships[key]['data'] = data[key]
+            if name in data:
+                relationships[name]['data'] = data.pop(name)
         return relationships
 
     def _process_validation_errors(self, exc):
@@ -161,7 +116,7 @@ class JsonApiSerializerMixin:
             # prune the dict of all related field errors
             for field in list(exc.detail):
                 for error in exc.detail[field]:
-                    if field in self._related_fields:
+                    if field in self.related_field_names:
                         excs.append(RelationshipError(field, error))
                         del exc.detail[field]
 
@@ -200,12 +155,12 @@ class JsonApiSerializerMixin:
             jsonapi.org/format/#document-resource-objects
         """
 
-        not_included = {
-            key: self.fields.pop(key) for key, field in self._related_fields.items()
-            if key not in self.context.get('includes', {})
-        }
+        for name in self.related_field_names:
+            if name not in self.context.get('includes', {}):
+                self.fields.pop(name)
+
+        # do this after so queries are skipped
         data = super().to_representation(instance)
-        self.fields.update(not_included)
 
         try:
             links = {'self': reverse(self.rtype + '-detail', args=[instance.pk])}
@@ -217,5 +172,5 @@ class JsonApiSerializerMixin:
             'links': links,
             'relationships': self._get_relationships(data=data),
             'type': self.rtype,
-            'id': data.pop('id'),
+            'id': str(data.pop('id')),
         }

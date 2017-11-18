@@ -1,6 +1,6 @@
 """
     drfjsonapi.relations
-    ~~~~~~~~~~~~~~~~~~~~~
+    ~~~~~~~~~~~~~~~~~~~~
 
     DRF relationship fields to assist with a JSON API spec
     compliant API.
