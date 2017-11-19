@@ -6,20 +6,13 @@
     compliant API.
 """
 
-from rest_framework.pagination import (
-    LimitOffsetPagination as _LimitOffsetPagination,
-)
-from rest_framework.utils.urls import (
-    remove_query_param,
-    replace_query_param,
-)
+from rest_framework.pagination import LimitOffsetPagination as _LimitOffsetPagination
+from rest_framework.utils.urls import remove_query_param, replace_query_param
+
 from .exceptions import InvalidPageParam
 
 
-__all__ = ('LimitOffsetPagination',)
-
-
-class JsonApiPagination(object):
+class JsonApiPagination:
     """ Base pager for all JsonApiPagers """
 
     pass

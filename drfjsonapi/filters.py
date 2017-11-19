@@ -6,7 +6,6 @@
     compliant API.
 """
 
-import itertools
 import re
 
 from django.core.exceptions import ImproperlyConfigured
@@ -14,10 +13,10 @@ from rest_framework.filters import (
     BaseFilterBackend,
     OrderingFilter as _OrderingFilter,
 )
-from .exceptions import InvalidIncludeParam, InvalidSortParam
+from .exceptions import InvalidSortParam
 
 
-__all__ = ('FieldFilter', 'IncludeFilter', 'OrderingFilter')
+__all__ = ('FieldFilter', 'OrderingFilter')
 
 
 class JsonApiFilter(object):
@@ -81,63 +80,6 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
             except (AttributeError, IndexError):
                 continue
         return filters
-
-
-class IncludeFilter(JsonApiFilter, BaseFilterBackend):
-    """ Support the include of compound documents
-
-    The `filter_queryset` entry point method requires the view
-    provided to have a `get_includes` method & that MUST return
-    a dict of includable field names & serializers.
-
-    If the global `max_includes` property limit is not exceeded
-    then each include is tested for eligibility which simply
-    means being present as a key in the return of `get_includes`
-    on the view.
-
-    All vetted includes will then have prefetching logic attached
-    to the primary datasets queryset for efficiency.
-    """
-
-    max_includes = 15
-
-    def filter_queryset(self, request, queryset, view):
-        """ DRF entry point into the custom FilterBackend """
-
-        includes = self.get_query_includes(request)
-        if includes:
-            request.includes = self.validate_includes(includes, view)
-            # this should distinguish select_related vs prefetch_related
-            queryset = queryset.prefetch_related(*request.includes)
-        return queryset
-
-    def get_query_includes(self, request):
-        """ Return the sanitized `include` query parameters
-
-        Handles comma separated & multiple include params &
-        returns a tuple of duplicate free strings
-        """
-
-        includes = request.query_params.getlist('include')
-        includes = [include.split(',') for include in includes]
-        includes = list(itertools.chain(*includes))
-        return tuple(set(includes))
-
-    def validate_includes(self, includes, view):
-        """ Validate all the sanitized includeed query parameters """
-
-        if len(includes) > self.max_includes:
-            msg = 'The include query parameter requested "%s" additional ' \
-                  'compound documents exceeding the max number of "%s"' \
-                  % (len(includes), self.max_includes)
-            raise InvalidIncludeParam(msg)
-
-        for field in includes:
-            if field not in getattr(view, 'includable_fields', {}):
-                msg = 'The "%s" include query parameter is not supported ' \
-                      'by this endpoint.' % field
-                raise InvalidIncludeParam(msg)
-        return includes
 
 
 class OrderingFilter(JsonApiFilter, _OrderingFilter):

@@ -26,14 +26,8 @@ class ResourceRelatedField(SlugRelatedField):
         super().__init__(slug_field=slug_field, **kwargs)
 
     def get_rtype(self, instance: models.Model) -> str:
-        """ Return the "Resource Identifier" type member
+        """ Return the "Resource Identifier" type member """
 
-        :spec:
-            jsonapi.org/format/#document-resource-identifier-objects
-            jsonapi.org/format/#document-resource-object-identification
-        """
-
-        assert isinstance(self.rtype, str), 'rtype must be a str'
         return self.rtype
 
     def to_internal_value(self, data: dict) -> models.Model:
@@ -58,10 +52,7 @@ class ResourceRelatedField(SlugRelatedField):
         return instance
 
     def to_representation(self, obj: models.Model) -> dict:
-        """ DRF override during serialization
-
-        This won't be called unless included by parent serializer
-        """
+        """ DRF override during serialization """
 
         return {
             'id': str(super().to_representation(obj)),

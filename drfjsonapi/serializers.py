@@ -67,8 +67,6 @@ class JsonApiSerializerMixin:
                     'related': reverse(related_view, args=(data['id'],))
                 },
             }
-            if name in data:
-                relationships[name]['data'] = data.pop(name)
         return relationships
 
     def _process_validation_errors(self, exc):
@@ -140,13 +138,9 @@ class JsonApiSerializerMixin:
 
         if data['type'] != self.rtype:
             raise RtypeConflict(given=data['type'], rtype=self.rtype)
+        return super().to_internal_value(data)
 
-        try:
-            return super().to_internal_value(data)
-        except exceptions.ValidationError as exc:
-            self._process_validation_errors(exc)
-
-    def to_representation(self, instance, skip_includes=False):
+    def to_representation(self, instance):
         """ DRF override return an individual "Resource Object" object
 
         The renderer will later wrap it with the "Top Level" members.
@@ -155,14 +149,8 @@ class JsonApiSerializerMixin:
             jsonapi.org/format/#document-resource-objects
         """
 
-        try:
-            includes = self.context['request'].includes
-        except (AttributeError, KeyError):
-            includes = ()
-
         for name in self.related_field_names:
-            if skip_includes or name not in includes:
-                self.fields.pop(name)
+            self.fields.pop(name)
 
         # do this after so queries are skipped
         data = super().to_representation(instance)

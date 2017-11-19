@@ -29,7 +29,6 @@ from .exceptions import (
 )
 from .filters import (
     FieldFilter,
-    IncludeFilter,
     OrderingFilter,
 )
 from .filtersets import JsonApiFilterSet
@@ -120,7 +119,7 @@ class JsonApiViewMixin:
     enabled on the view, via this modules filter_backends.
     """
 
-    filter_backends = (FieldFilter, IncludeFilter, OrderingFilter)
+    filter_backends = (FieldFilter, OrderingFilter)
     pagination_class = LimitOffsetPagination
     parser_classes = (JsonApiResourceParser,)
     renderer_classes = (JsonApiRenderer,)
@@ -162,7 +161,7 @@ class JsonApiViewMixin:
             elif param.startswith('filter[') and FieldFilter not in filters:
                 msg = '"filter" query parameters are not supported'
                 raise InvalidFilterParam(msg)
-            elif param == 'include' and IncludeFilter not in filters:
+            elif param == 'include':
                 msg = '"include" query parameters are not supported'
                 raise InvalidIncludeParam(msg)
             elif param.startswith('page['):
