@@ -6,6 +6,7 @@
 """
 
 from rest_framework import exceptions
+from rest_framework import status
 
 
 class JsonApiException(exceptions.APIException):
@@ -51,7 +52,7 @@ class InvalidBody(JsonApiException):
 
     default_detail = 'Your request had an invalid JSON API request body.'
     link = 'http://jsonapi.org/format/'
-    status_code = 400
+    status_code = status.HTTP_400_BAD_REQUEST
     title = 'Invalid or corrupt request body'
 
 
@@ -60,7 +61,7 @@ class InvalidQueryParam(JsonApiException):
 
     default_detail = 'Your request had an invalid query parameter.'
     link = 'https://tools.ietf.org/html/rfc7231#section-6.5.1'
-    status_code = 400
+    status_code = status.HTTP_400_BAD_REQUEST
     title = 'Invalid or corrupt query parameter'
 
 
@@ -114,7 +115,7 @@ class GenericNotFound(JsonApiException):
     """ Generic 404 error """
 
     link = 'https://tools.ietf.org/html/rfc7231#section-6.5.4'
-    status_code = 404
+    status_code = status.HTTP_404_NOT_FOUND
 
 
 class ResourceNotFound(GenericNotFound):
@@ -146,7 +147,7 @@ class ConflictError(JsonApiException):
 
     default_detail = 'Your request had a generic resource conflict.'
     link = 'https://tools.ietf.org/html/rfc7231#section-6.5.8'
-    status_code = 409
+    status_code = status.HTTP_409_CONFLICT
     title = 'Resource conflict error'
 
 
@@ -176,7 +177,7 @@ class ValidationError(JsonApiException):
     """ Custom 422 for handling validation errors """
 
     link = 'https://tools.ietf.org/html/rfc4918#section-11.2'
-    status_code = 422
+    status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
     title = 'One or more validation errors'
 
 
@@ -226,5 +227,5 @@ class InternalError(JsonApiException):
     default_detail = 'Our service had an unexpected internal error. ' \
                      'It could be transient so please retry your request.'
     link = 'https://tools.ietf.org/html/rfc7231#section-6.6.1'
-    status_code = 500
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     title = 'The request had an unexpected error'

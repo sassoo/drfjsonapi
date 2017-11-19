@@ -11,11 +11,10 @@ from django.core.exceptions import ObjectDoesNotExist
 def _get_related_field(model, field_name):
     """ Get the model(s) from a Django related field
 
-    If it's a many relationship then it will have the
-    `all()` method & if it's a OneToOne without a value
-    it will raise ObjectDoesNotExist. If it does have a
-    value or is a ForeigKey then just get the field. It
-    will return None if not set.
+    If it's a many relationship then it will have the `all()`
+    method & if it's a OneToOne without a value it will raise
+    ObjectDoesNotExist. If it does have a value or is a ForeigKey
+    then just get the field. It will return None if not set.
 
     Because of all that, this handles ToMany's, ForeigKey's
     & OneToOne fields.

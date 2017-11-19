@@ -5,7 +5,7 @@
     DRF renderer that is compliant with the JSON API spec
 """
 
-from collections import Iterable, OrderedDict
+from collections import Iterable
 from rest_framework.renderers import JSONRenderer
 from .utils import _get_related_field
 
@@ -19,48 +19,7 @@ class JsonApiRenderer(JSONRenderer):
 
     media_type = 'application/vnd.api+json'
 
-    # pylint: disable=too-many-arguments
-    def _get_include(self, fields, model, include_table):
-        """ Populate the included table for future processing
-
-        This is a self-referential walking of the cache tree
-        that was created by the `IncludeFilter`. It will add
-        each model by serializer type & primary key to the
-        include table so no dupes are present.
-
-        It does not return anything & instead has mutation
-        side-effects of the include table.
-
-        NOTE: the serializer for each included model needs
-              to know which fields will be included so
-              proper data linkage can occur.
-
-              This is done via the context
-        """
-
-        include_fields = [f for f in fields.keys() if f != 'serializer']
-        for field in include_fields:
-            relations = _get_related_field(model, field)
-            if not relations:
-                continue
-            elif not isinstance(relations, Iterable):
-                relations = [relations]
-
-            for relation in relations:
-                relation_fields = [
-                    f for f in fields[field].keys()
-                    if f != 'serializer'
-                ]
-                # build a hash table of resource id &
-                # serializer class name so dupes are avoided
-                serializer = fields[field]['serializer']
-                serializer.context['includes'] = relation_fields
-                data = serializer.to_representation(relation)
-                include_table['%s_%s' % (data['id'], data['type'])] = data
-
-                self._get_include(fields[field], relation, include_table)
-
-    def get_included(self, resources, request):
+    def get_included(self, data, context: dict) -> list:
         """ Return the top level "Included Resources" array
 
         This should return a list that is compliant with the
@@ -70,43 +29,48 @@ class JsonApiRenderer(JSONRenderer):
         there should be no duplicates within the included array
         itself or the primary data.
 
-        The drfjsonapi `IncludeFilter` adds a private property
-        to the request object named `_includes` which greatly
-        reduces the complexity of this process.
-
         TIP: read the documentation of the `IncludeFilter`
              class for more information.
         """
 
-        if not resources:
+        def table_key(resource):
+            """ Generate a key from serialized `id` & `type` """
+
+            return '_'.join((resource['id'], resource['type']))
+
+        request, view = context['request'], context['view']
+
+        if not data or not hasattr(request, 'includes'):
             return []
 
-        # could be single model or many or serializer is None
         # if single then coerce into list
-        models = getattr(resources.serializer, 'instance', None)
-        if models and not isinstance(models, list):
+        models = data.serializer.instance
+        if not isinstance(models, Iterable):
             models = [models]
+            data = [data]
 
-        if not all((models, hasattr(request, '_includes'))):
-            return []
-        # could be a ReturnDict or ReturnList but coerce
-        # into list so simple 'in' checks can work later
-        elif resources and not isinstance(resources, list):
-            resources = [resources]
+        primary_cache = {table_key(d): d for d in data}
+        include_cache = {}
 
-        primary_table = {'%s_%s' % (r['id'], r['type']): r for r in resources}
-        include_table = {}
         for model in models:
-            self._get_include(request._includes, model, include_table)
+            for field in request.includes:
+                rels = _get_related_field(model, field)
+                if not rels:
+                    continue
+                elif not isinstance(rels, Iterable):
+                    rels = [rels]
 
-        # serialize everything in included not in primary data
-        included = []
-        for key, val in include_table.items():
-            if key not in primary_table:
-                included.append(val)
-        return included
+                serializer = view.includable_fields[field]
+                serializer = serializer(context=context)
 
-    def get_jsonapi(self) -> dict:
+                for rel in rels:
+                    val = serializer.to_representation(rel, skip_includes=True)
+                    if table_key(val) not in primary_cache:
+                        include_cache[table_key(val)] = val
+
+        return include_cache.values()
+
+    def get_jsonapi(self, context: dict) -> dict:
         """ Return the top level "JSON API" object
 
         :spec:
@@ -115,7 +79,7 @@ class JsonApiRenderer(JSONRenderer):
 
         return {'version': '1.0'}
 
-    def get_links(self, request, pager: dict) -> dict:
+    def get_links(self, pager: dict, context: dict) -> dict:
         """ Return the top level "Links" object
 
         According to the JSON API spec this should include
@@ -126,9 +90,8 @@ class JsonApiRenderer(JSONRenderer):
             jsonapi.org/format/#fetching-pagination
         """
 
-        links = {'self': request.build_absolute_uri()}
-        if pager:
-            links.update(pager['links'])
+        links = {'self': context['request'].get_full_path()}
+        links.update(pager.get('links', {}))
         return links
 
     def render(self, data, accepted_media_type=None, renderer_context=None):
@@ -140,23 +103,19 @@ class JsonApiRenderer(JSONRenderer):
         or an "Errors" object.
         """
 
-        pager = {}
-        request = renderer_context['request']
-
-        # list with drfjsonapi pager
-        if isinstance(data, OrderedDict) and 'pager' in data:
-            pager = data['pager']
-            data = data['results']
-
         if data and 'errors' in data:
-            body = data
-        else:
-            body = {
-                'data': data,
-                'included': self.get_included(data, request),
-                'jsonapi': self.get_jsonapi(),
-                'links': self.get_links(request, pager),
-                'meta': pager.get('meta', {}),
-            }
+            return super().render(data, accepted_media_type, renderer_context)
 
+        try:
+            data, pager = data['results'], data['pager']
+        except (KeyError, TypeError):
+            pager = {}
+
+        body = {
+            'data': data,
+            'included': self.get_included(data, renderer_context),
+            'jsonapi': self.get_jsonapi(renderer_context),
+            'links': self.get_links(pager, renderer_context),
+            'meta': pager.get('meta', {}),
+        }
         return super().render(body, accepted_media_type, renderer_context)

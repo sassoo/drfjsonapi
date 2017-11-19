@@ -40,10 +40,7 @@ class JsonApiRelationshipNormalizer:
     """ Normalize a JSON API relationship update compliant payload """
 
     def normalize(self, body: dict) -> dict:
-        """ Entry point from the parser
-
-        XXX FINISH
-        """
+        """ Entry point from the parser """
 
         raise NotImplementedError
 
@@ -57,7 +54,8 @@ class JsonApiRelationshipParser(JSONParser):
     jsonapi_normalizer = JsonApiRelationshipNormalizer
     jsonapi_schema = RELATIONSHIP_LINKAGE_SCHEMA
 
-    def parse(self, *args, **kwargs):  # pylint: disable=arguments-differ
+    # pylint: disable=arguments-differ
+    def parse(self, *args, **kwargs):
         """ DRF entry point """
 
         body = super().parse(*args, **kwargs)
@@ -78,8 +76,8 @@ class JsonApiResourceNormalizer:
         data = {
             'id': body['data'].get('id'),
             'type': body['data']['type'],
+            **body['data'].get('attributes', {}),
         }
-        data.update(body['data'].get('attributes', {}))
         data.update({
             k: v['data']
             for k, v in body['data'].get('relationships', {}).items()
@@ -96,7 +94,8 @@ class JsonApiResourceParser(JSONParser):
     jsonapi_normalizer = JsonApiResourceNormalizer
     jsonapi_schema = RESOURCE_OBJECT_SCHEMA
 
-    def parse(self, *args, **kwargs):  # pylint: disable=arguments-differ
+    # pylint: disable=arguments-differ
+    def parse(self, *args, **kwargs):
         """ DRF entry point """
 
         body = super().parse(*args, **kwargs)

@@ -31,13 +31,10 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
     The `filter_queryset` entry point method requires the view
     provided to have a `get_filterset` method which is already
     present on DRF GenericAPIView instances & it MUST return a
-    filterset for the primary data.
+    JsonApiFilterset for the primary data.
 
     That filterset will be used to validate the `filter` query
     param values.
-
-    All vetted filters will have filter logic attached to the
-    primary datasets queryset.
     """
 
     def filter_queryset(self, request, queryset, view):
@@ -68,10 +65,6 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
         of:
 
             filter[<field>__<lookup>]=<value>
-
-        A dict will be generated for each match where the key
-        is the filter expression & the value is the value as
-        is in the query.
 
         An example filter of `filter[home__city__exact]=Orlando`
         would return a dict of:
@@ -113,9 +106,9 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
 
         includes = self.get_query_includes(request)
         if includes:
-            self.validate_includes(includes)
-            queryset = queryset.prefetch_related(*includes)
-            request._includes = includes  # pylint: disable=protected-access
+            request.includes = self.validate_includes(includes, view)
+            # this should distinguish select_related vs prefetch_related
+            queryset = queryset.prefetch_related(*request.includes)
         return queryset
 
     def get_query_includes(self, request):
@@ -130,7 +123,7 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
         includes = list(itertools.chain(*includes))
         return tuple(set(includes))
 
-    def validate_includes(self, includes):
+    def validate_includes(self, includes, view):
         """ Validate all the sanitized includeed query parameters """
 
         if len(includes) > self.max_includes:
@@ -138,6 +131,13 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
                   'compound documents exceeding the max number of "%s"' \
                   % (len(includes), self.max_includes)
             raise InvalidIncludeParam(msg)
+
+        for field in includes:
+            if field not in getattr(view, 'includable_fields', {}):
+                msg = 'The "%s" include query parameter is not supported ' \
+                      'by this endpoint.' % field
+                raise InvalidIncludeParam(msg)
+        return includes
 
 
 class OrderingFilter(JsonApiFilter, _OrderingFilter):

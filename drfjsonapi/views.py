@@ -36,7 +36,6 @@ from .filtersets import JsonApiFilterSet
 from .renderers import JsonApiRenderer
 from .pagination import JsonApiPagination, LimitOffsetPagination
 from .parsers import JsonApiResourceParser
-from .status_codes import STATUS_CODES
 
 
 def _get_error(exc):
@@ -45,7 +44,7 @@ def _get_error(exc):
     return {
         'id': get_random_string(),
         'links': {'about': getattr(exc, 'link', '')},
-        'status': STATUS_CODES[exc.status_code],
+        'status': exc.status_code,
         'code': getattr(exc, 'code', exc.__class__.__name__),
         'title': getattr(exc, 'title', ''),
         'detail': getattr(exc, 'detail', ''),
@@ -147,13 +146,6 @@ class JsonApiViewMixin:
             return self.filterset_class(context=self.get_serializer_context())
         except AttributeError:
             return JsonApiFilterSet(context=self.get_serializer_context())
-
-    def get_serializer_context(self):
-        """ Let the serializer know which related fields to include """
-
-        context = super().get_serializer_context()
-        context['includes'] = getattr(self.request, '_includes', {}).keys()
-        return context
 
     def initialize_request(self, request, *args, **kwargs):
         """ Perform some spec compliance checks as early as possible """
