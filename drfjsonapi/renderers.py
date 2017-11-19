@@ -1,6 +1,6 @@
 """
     drfjsonapi.renderers
-    ~~~~~~~~~~~~~~~~~~~~~
+    ~~~~~~~~~~~~~~~~~~~~
 
     DRF renderer that is compliant with the JSON API spec
 """
