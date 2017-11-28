@@ -11,7 +11,7 @@ from django.utils.translation import ugettext_lazy as _
 from rest_framework.relations import SlugRelatedField
 
 
-class ResourceRelatedField(SlugRelatedField):
+class JsonApiRelatedField(SlugRelatedField):
     """ JSON API related field for relationships """
 
     default_error_messages = {

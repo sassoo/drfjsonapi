@@ -19,13 +19,13 @@ from .exceptions import (
     ResourceError,
     RtypeConflict,
 )
-from .relations import ResourceRelatedField
+from .relations import JsonApiRelatedField
 
 
 class JsonApiSerializerMixin:
     """ JSON API Serializer mixin """
 
-    serializer_related_field = ResourceRelatedField
+    serializer_related_field = JsonApiRelatedField
 
     def __init__(self, *args, **kwargs):
         """ Create a backup of the relationship field names """
@@ -34,7 +34,7 @@ class JsonApiSerializerMixin:
 
         self.related_field_names = [
             name for name, field in self.fields.items()
-            if isinstance(field, (ResourceRelatedField, ManyRelatedField))
+            if isinstance(field, (JsonApiRelatedField, ManyRelatedField))
         ]
 
     @property
