@@ -14,10 +14,11 @@ from rest_framework.relations import SlugRelatedField
 class JsonApiRelatedField(SlugRelatedField):
     """ JSON API related field for relationships """
 
-    default_error_messages = dict(**SlugRelatedField.default_error_messages, **{
-        'rtype_conflict': _('Incorrect resource type of "{given}". Only '
-                            '"{rtype}" resource types are accepted'),
-    })
+    default_error_messages = {
+        'does_not_exist': _('Does not exist.'),
+        'invalid': _('Invalid value.'),
+        'invalid_rtype': _('Invalid resource type of "{given}".'),
+    }
 
     def __init__(self, slug_field='id', **kwargs):
         """ Process our custom attrs so DRF doesn't barf """
@@ -48,7 +49,7 @@ class JsonApiRelatedField(SlugRelatedField):
 
         _rtype = self.get_rtype(instance)
         if _rtype != rtype:
-            self.fail('rtype_conflict', given=rtype, rtype=_rtype)
+            self.fail('invalid_rtype', given=rtype)
         return instance
 
     def to_representation(self, obj: models.Model) -> dict:
