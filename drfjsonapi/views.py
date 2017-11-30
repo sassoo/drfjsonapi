@@ -7,7 +7,7 @@
 
 import traceback
 
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 from django.core.urlresolvers import resolve, reverse
 from django.utils.crypto import get_random_string
 from django.http import Http404
@@ -43,10 +43,10 @@ def _get_error(exc):
     return {
         'id': get_random_string(),
         'links': {'about': getattr(exc, 'link', '')},
-        'status': exc.status_code,
+        'status': str(exc.status_code),
         'code': getattr(exc, 'code', exc.__class__.__name__),
         'title': getattr(exc, 'title', ''),
-        'detail': getattr(exc, 'detail', ''),
+        'detail': getattr(exc, 'detail', str(exc)),
         'source': getattr(exc, 'source', {'pointer': ''}),
         'meta': getattr(exc, 'meta', {}),
     }
@@ -84,6 +84,9 @@ def jsonapi_exception_handler(exc, context):
         exc.title = 'Authentication is required'
     elif isinstance(exc, exceptions.ParseError):
         exc.title = 'Invalid or corrupt request body'
+    elif isinstance(exc, PermissionDenied):
+        exc = exceptions.PermissionDenied(str(exc))
+        exc.title = 'Permission denied'
     elif isinstance(exc, exceptions.PermissionDenied):
         exc.title = 'Permission denied'
     elif isinstance(exc, exceptions.ValidationError):
