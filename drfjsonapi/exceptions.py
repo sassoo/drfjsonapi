@@ -123,7 +123,7 @@ class ResourceNotFound(GenericNotFound):
 
     default_detail = 'The endpoint requested processed your request ' \
                      'just fine but was unable to find the resource ' \
-                     'requested. Did it get deleted?'
+                     'requested.'
     title = 'Resource not found'
 
 
