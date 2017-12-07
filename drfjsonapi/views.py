@@ -24,6 +24,7 @@ from .exceptions import (
     InvalidPageParam,
     InvalidSortParam,
     ManyExceptions,
+    ResourceError,
     ResourceNotFound,
     RouteNotFound,
 )
@@ -95,11 +96,16 @@ def jsonapi_exception_handler(exc, context):
             for error in errors:
                 excs.excs.append(FieldError('/' + field, error))
         exc = excs
-    elif isinstance(exc, ValidationError):
+    elif isinstance(exc, ValidationError) and hasattr(exc, 'message_dict'):
         excs = ManyExceptions([])
         for field, errors in exc.message_dict.items():
             for error in errors:
-                excs.excs.append(FieldError('/' + field, error))
+                excs.excs.append(FieldError(field, error))
+        exc = excs
+    elif isinstance(exc, ValidationError):
+        excs = ManyExceptions([])
+        for error in exc.messages:
+            excs.excs.append(ResourceError(error))
         exc = excs
     elif not isinstance(exc, exceptions.APIException):
         traceback.print_exc()  # print it
