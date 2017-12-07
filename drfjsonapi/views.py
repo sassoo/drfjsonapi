@@ -153,7 +153,9 @@ class JsonApiViewMixin:
         try:
             return self.filterset_class(context=self.get_serializer_context())
         except AttributeError:
-            return JsonApiFilterSet(context=self.get_serializer_context())
+            filterable_fields = getattr(self, 'filterable_fields', {})
+            return JsonApiFilterSet(context=self.get_serializer_context(),
+                                    filterable_fields=filterable_fields)
 
     def initialize_request(self, request, *args, **kwargs):
         """ Perform some spec compliance checks as early as possible """

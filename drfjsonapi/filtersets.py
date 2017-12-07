@@ -14,13 +14,13 @@ from .exceptions import InvalidFilterParam
 class JsonApiFilterSet:
     """ This should be subclassed by custom FilterSets """
 
-    filterable_fields = {}
     max_filters = 15
 
-    def __init__(self, context=None):
+    def __init__(self, context=None, filterable_fields=None):
         """ Context will include the request & view """
 
         self.context = context or {}
+        self.filterable_fields = filterable_fields or {}
 
     def get_filter_expression(self, param, value):
         """ Return a valid django filter expression for the query param """
