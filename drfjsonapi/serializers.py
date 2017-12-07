@@ -122,7 +122,10 @@ class JsonApiSerializerMixin:
             # only field errors left now
             for field, errors in _flatten(exc.detail).items():
                 for error in errors:
-                    excs.append(FieldError(field, error))
+                    if field == 'non_field_errors':
+                        excs.append(ResourceError(error))
+                    else:
+                        excs.append(FieldError(field, error))
 
         raise ManyExceptions(excs)
 
