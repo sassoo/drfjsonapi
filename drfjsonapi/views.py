@@ -7,7 +7,7 @@
 
 import traceback
 
-from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
+from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.core.urlresolvers import resolve, reverse
 from django.utils.crypto import get_random_string
 from django.http import Http404
@@ -92,6 +92,12 @@ def jsonapi_exception_handler(exc, context):
     elif isinstance(exc, exceptions.ValidationError):
         excs = ManyExceptions([])
         for field, errors in exc.detail.items():
+            for error in errors:
+                excs.excs.append(FieldError('/' + field, error))
+        exc = excs
+    elif isinstance(exc, ValidationError):
+        excs = ManyExceptions([])
+        for field, errors in exc.message_dict.items():
             for error in errors:
                 excs.excs.append(FieldError('/' + field, error))
         exc = excs
