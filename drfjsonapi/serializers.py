@@ -62,6 +62,7 @@ class JsonApiSerializerMixin:
         relationships = {}
         for name in self.related_field_names:
             related_view = '%s-%s' % (self.rtype, name)
+            related_view = related_view.replace('_', '-')
             relationships[name] = {
                 'links': {
                     'related': reverse(related_view, args=(data['id'],))
