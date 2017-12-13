@@ -28,14 +28,32 @@ class JsonApiSerializerMixin:
     serializer_related_field = JsonApiRelatedField
 
     def __init__(self, *args, **kwargs):
-        """ Create a backup of the relationship field names """
+        """ Optimize & intelligently handle JSON API resources
+
+        If a `data` kwarg is provided then it's assumed a modification is
+        desired (create or update) & all relationship fields will resolve
+        which may cause a database query.
+
+        If a `data` kwarg is not provided then an `includes` iterable is
+        checked in the context passed of relationship fields that will
+        resolve. Otherwise they are skipped as an optimization.
+
+        The pruned relationship fields are accessible via the `related_fields`
+        attribute.
+        """
 
         super().__init__(*args, **kwargs)
 
-        self.related_field_names = [
-            name for name, field in self.fields.items()
+        self.related_fields = {
+            name: field for name, field in self.fields.items()
             if isinstance(field, (JsonApiRelatedField, ManyRelatedField))
-        ]
+        }
+
+        if not kwargs.get('data'):
+            includes = self.context.get('includes', ())
+            for name in self.related_fields:
+                if name not in includes:
+                    self.fields.pop(name)
 
     @property
     def rtype(self) -> str:
@@ -48,7 +66,7 @@ class JsonApiSerializerMixin:
                   'the JSON API resource type`' % self.__class__.__name__
             raise ImproperlyConfigured(msg)
 
-    def _get_relationships(self, data: dict) -> dict:
+    def _to_representation_relationships(self, data) -> dict:
         """ Return the "Relationships Object" for a resource
 
         Relationships always get top-level links but if they have
@@ -60,7 +78,7 @@ class JsonApiSerializerMixin:
         """
 
         relationships = {}
-        for name in self.related_field_names:
+        for name in self.related_fields:
             related_view = '%s-%s' % (self.rtype, name)
             related_view = related_view.replace('_', '-')
             relationships[name] = {
@@ -68,6 +86,8 @@ class JsonApiSerializerMixin:
                     'related': reverse(related_view, args=(data['id'],))
                 },
             }
+            if name in data:
+                relationships[name]['data'] = data.pop(name)
         return relationships
 
     def _process_validation_errors(self, exc):
@@ -115,7 +135,7 @@ class JsonApiSerializerMixin:
             # prune the dict of all related field errors
             for field in list(exc.detail):
                 for error in exc.detail[field]:
-                    if field in self.related_field_names:
+                    if field in self.related_fields:
                         excs.append(RelationshipError(field, error))
                         del exc.detail[field]
 
@@ -153,10 +173,6 @@ class JsonApiSerializerMixin:
             jsonapi.org/format/#document-resource-objects
         """
 
-        for name in self.related_field_names:
-            self.fields.pop(name)
-
-        # do this after so queries are skipped
         data = super().to_representation(instance)
 
         try:
@@ -167,7 +183,7 @@ class JsonApiSerializerMixin:
         return {
             'attributes': data,
             'links': links,
-            'relationships': self._get_relationships(data=data),
+            'relationships': self._to_representation_relationships(data),
             'type': self.rtype,
             'id': str(data.pop('id')),
         }
