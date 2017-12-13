@@ -56,9 +56,9 @@ def _get_error(exc):
 def _get_errors(response, exc):
     """ Set the root 'errors' key of the exception(s)
 
-    The exception could be a ManyExceptions containing
-    multiple APIExceptions or a single APIException. Either
-    way JSON API requires an 'errors' root key with an array.
+    The exception could be a ManyExceptions containing multiple
+    APIExceptions or a single APIException. Either way JSON API
+    requires an 'errors' root key with an array.
     """
 
     response.data = {'errors': []}
@@ -73,10 +73,6 @@ def jsonapi_exception_handler(exc, context):
     Turn the response payload into an array of "Error" objects.
     This will call the native DRF exception_handler which returns
     a response object that is further made JSON API compliant.
-
-    This is done by calling _get_error() on each exception
-    which will create a unique `id` for the error among
-    other standard JSON API compliant key/vals.
     """
 
     if isinstance(exc, Http404):
@@ -163,13 +159,11 @@ class JsonApiViewMixin:
             return JsonApiFilterSet(context=self.get_serializer_context(),
                                     filterable_fields=filterable_fields)
 
-    def initialize_request(self, request, *args, **kwargs):
+    def initial(self, request, *args, **kwargs):
         """ Perform some spec compliance checks as early as possible """
 
+        ret = super().initial(request, *args, **kwargs)
         filters = self.filter_backends
-        request = super().initialize_request(
-            request, *args, **kwargs
-        )
 
         for param in request.query_params.keys():
             if param.startswith('fields['):
@@ -189,7 +183,7 @@ class JsonApiViewMixin:
                 msg = '"sort" query parameters are not supported'
                 raise InvalidSortParam(msg)
 
-        return request
+        return ret
 
     def render_related_view(self, field, view_name):
         """ Render the related view of a single resource
