@@ -1,4 +1,10 @@
-""" XXX """
+"""
+    drfjsonapi.schemas
+    ~~~~~~~~~~~~~~~~~~
+
+    DRF schemas to assist with parsing currently.
+"""
+
 
 DEFINITIONS = {
     'links': {

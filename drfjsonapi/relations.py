@@ -6,7 +6,6 @@
     compliant API.
 """
 
-from django.db import models
 from django.utils.translation import ugettext_lazy as _
 from rest_framework.relations import SlugRelatedField
 
@@ -26,12 +25,12 @@ class JsonApiRelatedField(SlugRelatedField):
         self.rtype = kwargs.pop('rtype', None)
         super().__init__(slug_field=slug_field, **kwargs)
 
-    def get_rtype(self, instance: models.Model) -> str:
+    def get_rtype(self, instance):
         """ Return the "Resource Identifier" type member """
 
         return self.rtype
 
-    def to_internal_value(self, data: dict) -> models.Model:
+    def to_internal_value(self, data):
         """ DRF override during deserialization
 
         A JSON API normalized relationship will have the following
@@ -52,7 +51,7 @@ class JsonApiRelatedField(SlugRelatedField):
             self.fail('invalid_rtype', given=rtype)
         return instance
 
-    def to_representation(self, obj: models.Model) -> dict:
+    def to_representation(self, obj):
         """ DRF override during serialization """
 
         return {

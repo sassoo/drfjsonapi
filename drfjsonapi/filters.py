@@ -13,10 +13,7 @@ from rest_framework.filters import (
     BaseFilterBackend,
     OrderingFilter as _OrderingFilter,
 )
-from .exceptions import InvalidSortParam
-
-
-__all__ = ('FieldFilter', 'OrderingFilter')
+from .exceptions import InvalidIncludeParam, InvalidSortParam
 
 
 class JsonApiFilter(object):
@@ -44,11 +41,11 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
             if not filterset:
                 raise AttributeError
         except AttributeError:
-            msg = 'Using "%s" requires a view that returns a ' \
-                  'filterset from "get_filterset()"'
-            raise ImproperlyConfigured(msg % self.__class__.__name__)
+            msg = 'Using "%s" requires a view that returns a filterset ' \
+                  'from "get_filterset()"' % self.__class__.__name__
+            raise ImproperlyConfigured(msg)
 
-        filters = self.get_query_filters(request)
+        filters = self.parse(request)
         if filters:
             filters = filterset.to_internal_value(filters)
             filters = filterset.validate(filters)
@@ -56,7 +53,7 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
             queryset = queryset.filter(q_filter).distinct()
         return queryset
 
-    def get_query_filters(self, request):
+    def parse(self, request):
         """ Return the sanitized `filter` query parameters
 
         Loop through all the query parameters & use a regular
@@ -80,6 +77,36 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
             except (AttributeError, IndexError):
                 continue
         return filters
+
+
+class IncludeFilter(JsonApiFilter, BaseFilterBackend):
+    """ Support the inclusion of compound documents
+
+    The `filter_queryset` entry point method requires the view provided
+    to have an `includeset_class` attribute or IncludeSet instance
+    returned from the views `get_includeset()`.
+    """
+
+    def filter_queryset(self, request, queryset, view):
+        """ DRF entry point into the custom FilterBackend """
+
+        try:
+            includeset = view.get_includeset()
+        except AttributeError:
+            includeset = None
+
+        if not includeset and 'include' in request.query_params.keys():
+            raise InvalidIncludeParam('"include" query parameters are not supported')
+
+        include = ()
+
+        if includeset:
+            include = includeset.to_internal_value(request)
+            include = includeset.validate(include)
+            queryset = includeset.filter_queryset(queryset, include)
+
+        request.jsonapi_include = include
+        return queryset
 
 
 class OrderingFilter(JsonApiFilter, _OrderingFilter):

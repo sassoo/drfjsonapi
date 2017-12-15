@@ -2,8 +2,7 @@
     drfjsonapi.filtersets
     ~~~~~~~~~~~~~~~~~~~~~
 
-    Interface for handling the JSON API filter query
-    parameters.
+    Interface for handling the JSON API filter query parameters.
 """
 
 from django.db.models import Q

@@ -17,7 +17,21 @@ class JsonApiRenderer(JSONRenderer):
 
     media_type = 'application/vnd.api+json'
 
-    def get_links(self, pager: dict, context: dict) -> dict:
+    def get_included(self, data, context) -> list:
+        """ Return the top level "Included Resources" array
+
+        This should return a list that is compliant with the
+        "Resource Objects" section of the JSON API spec.
+        """
+
+        try:
+            models = data.serializer.instance
+            includeset = context['view'].get_includeset()
+            return includeset.to_representation(models)
+        except (AttributeError, KeyError, TypeError):
+            return []
+
+    def get_links(self, pager, context) -> dict:
         """ Return the top level "Links" object
 
         According to the JSON API spec this should include
@@ -28,8 +42,9 @@ class JsonApiRenderer(JSONRenderer):
             jsonapi.org/format/#fetching-pagination
         """
 
-        links = {'self': context['request'].get_full_path()}
-        links.update(pager.get('links', {}))
+        links = pager.get('links', {})
+        if context and context.get('request'):
+            links['self'] = context.get('request').get_full_path()
         return links
 
     def render(self, data, accepted_media_type=None, renderer_context=None):
@@ -51,9 +66,10 @@ class JsonApiRenderer(JSONRenderer):
 
         body = {
             'data': data,
-            'included': [],
+            'included': self.get_included(data, renderer_context),
             'jsonapi': {'version': '1.0'},
             'links': self.get_links(pager, renderer_context),
             'meta': pager.get('meta', {}),
         }
+
         return super().render(body, accepted_media_type, renderer_context)

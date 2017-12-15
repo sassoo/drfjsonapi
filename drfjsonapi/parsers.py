@@ -17,10 +17,7 @@ from rest_framework.parsers import JSONParser
 
 from .exceptions import InvalidBody
 from .renderers import JsonApiRenderer
-from .schema import (
-    RELATIONSHIP_LINKAGE_SCHEMA,
-    RESOURCE_OBJECT_SCHEMA,
-)
+from .schemas import RELATIONSHIP_LINKAGE_SCHEMA, RESOURCE_OBJECT_SCHEMA
 
 
 def _validate_body(body: dict, schema: dict) -> None:
@@ -73,16 +70,16 @@ class JsonApiResourceNormalizer:
         serializers work as expected.
         """
 
-        data = {
-            'id': body['data'].get('id'),
-            'type': body['data']['type'],
-            **body['data'].get('attributes', {}),
+        data = body['data']
+        attributes = data.get('attributes', {})
+        relationships = {k: v['data'] for k, v in data.get('relationships', {}).items()}
+
+        return {
+            'id': data.get('id'),
+            'type': data['type'],
+            **relationships,
+            **attributes,
         }
-        data.update({
-            k: v['data']
-            for k, v in body['data'].get('relationships', {}).items()
-        })
-        return data
 
 
 class JsonApiResourceParser(JSONParser):

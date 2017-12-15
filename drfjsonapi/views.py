@@ -20,7 +20,6 @@ from .exceptions import (
     InternalError,
     InvalidFieldParam,
     InvalidFilterParam,
-    InvalidIncludeParam,
     InvalidPageParam,
     InvalidSortParam,
     ManyExceptions,
@@ -30,6 +29,7 @@ from .exceptions import (
 )
 from .filters import (
     FieldFilter,
+    IncludeFilter,
     OrderingFilter,
 )
 from .filtersets import JsonApiFilterSet
@@ -46,7 +46,7 @@ def _get_error(exc):
         'links': {'about': getattr(exc, 'link', '')},
         'status': str(exc.status_code),
         'code': getattr(exc, 'code', exc.__class__.__name__),
-        'title': getattr(exc, 'title', ''),
+        'title': getattr(exc, 'title', str(exc)),
         'detail': getattr(exc, 'detail', str(exc)),
         'source': getattr(exc, 'source', {'pointer': ''}),
         'meta': getattr(exc, 'meta', {}),
@@ -77,15 +77,8 @@ def jsonapi_exception_handler(exc, context):
 
     if isinstance(exc, Http404):
         exc = ResourceNotFound()
-    elif isinstance(exc, exceptions.NotAuthenticated):
-        exc.title = 'Authentication is required'
-    elif isinstance(exc, exceptions.ParseError):
-        exc.title = 'Invalid or corrupt request body'
     elif isinstance(exc, PermissionDenied):
         exc = exceptions.PermissionDenied(str(exc))
-        exc.title = 'Permission denied'
-    elif isinstance(exc, exceptions.PermissionDenied):
-        exc.title = 'Permission denied'
     elif isinstance(exc, exceptions.ValidationError):
         excs = ManyExceptions([])
         for field, errors in exc.detail.items():
@@ -130,7 +123,7 @@ class JsonApiViewMixin:
     enabled on the view, via this modules filter_backends.
     """
 
-    filter_backends = (FieldFilter, OrderingFilter)
+    filter_backends = (FieldFilter, IncludeFilter, OrderingFilter)
     pagination_class = LimitOffsetPagination
     parser_classes = (JsonApiResourceParser,)
     renderer_classes = (JsonApiRenderer,)
@@ -159,8 +152,24 @@ class JsonApiViewMixin:
             return JsonApiFilterSet(context=self.get_serializer_context(),
                                     filterable_fields=filterable_fields)
 
+    def get_includeset(self):
+        """ Return an includeset instance from the `includeset_class` property """
+
+        try:
+            context = {'view': self, 'request': self.request}
+            return self.includeset_class(context=context)
+        except AttributeError:
+            return None
+
+    def get_serializer_context(self):
+        """ DRF override to inform serializers which related fields to include """
+
+        context = super().get_serializer_context()
+        context['include'] = getattr(self.request, 'jsonapi_include', ())
+        return context
+
     def initial(self, request, *args, **kwargs):
-        """ Perform some spec compliance checks as early as possible """
+        """ DRF override to enforce spec compliance as early as possible """
 
         ret = super().initial(request, *args, **kwargs)
         filters = self.filter_backends
@@ -172,9 +181,6 @@ class JsonApiViewMixin:
             elif param.startswith('filter[') and FieldFilter not in filters:
                 msg = '"filter" query parameters are not supported'
                 raise InvalidFilterParam(msg)
-            elif param == 'include':
-                msg = '"include" query parameters are not supported'
-                raise InvalidIncludeParam(msg)
             elif param.startswith('page['):
                 if not issubclass(self.pagination_class, JsonApiPagination):
                     msg = '"page" query parameters are not supported'

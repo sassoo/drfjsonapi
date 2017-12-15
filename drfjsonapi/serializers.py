@@ -10,6 +10,7 @@
 
 from django.core.exceptions import ImproperlyConfigured
 from django.urls import NoReverseMatch, reverse
+from django.utils.functional import cached_property
 from rest_framework import exceptions
 from rest_framework.relations import ManyRelatedField
 from .exceptions import (
@@ -22,10 +23,8 @@ from .exceptions import (
 from .relations import JsonApiRelatedField
 
 
-class JsonApiSerializerMixin:
-    """ JSON API Serializer mixin """
-
-    serializer_related_field = JsonApiRelatedField
+class IncludePerfMixin:
+    """ JSON API include optimization Serializer mixin (optional) """
 
     def __init__(self, *args, **kwargs):
         """ Optimize & intelligently handle JSON API resources
@@ -34,26 +33,33 @@ class JsonApiSerializerMixin:
         desired (create or update) & all relationship fields will resolve
         which may cause a database query.
 
-        If a `data` kwarg is not provided then an `includes` iterable is
+        If a `data` kwarg is not provided then an `include` iterable is
         checked in the context passed of relationship fields that will
         resolve. Otherwise they are skipped as an optimization.
-
-        The pruned relationship fields are accessible via the `related_fields`
-        attribute.
         """
 
         super().__init__(*args, **kwargs)
 
-        self.related_fields = {
-            name: field for name, field in self.fields.items()
-            if isinstance(field, (JsonApiRelatedField, ManyRelatedField))
-        }
-
         if not kwargs.get('data'):
-            includes = self.context.get('includes', ())
-            for name in self.related_fields:
-                if name not in includes:
-                    self.fields.pop(name)
+            include = self.context.get('include', ())
+            for name in self._related_field_names:
+                if name not in include:
+                    self.fields[name].write_only = True
+
+
+class JsonApiSerializerMixin:
+    """ JSON API Serializer mixin """
+
+    serializer_related_field = JsonApiRelatedField
+
+    @cached_property
+    def _related_field_names(self):
+        """ Return related field names """
+
+        return [
+            name for name, field in self.fields.items()
+            if isinstance(field, (JsonApiRelatedField, ManyRelatedField))
+        ]
 
     @property
     def rtype(self) -> str:
@@ -63,7 +69,7 @@ class JsonApiSerializerMixin:
             return self.Meta.rtype
         except AttributeError:
             msg = '"%s" must have a `Meta.rtype` attribute representing ' \
-                  'the JSON API resource type`' % self.__class__.__name__
+                  'the JSON API resource type' % self.__class__.__name__
             raise ImproperlyConfigured(msg)
 
     def _to_representation_relationships(self, data) -> dict:
@@ -78,7 +84,7 @@ class JsonApiSerializerMixin:
         """
 
         relationships = {}
-        for name in self.related_fields:
+        for name in self._related_field_names:
             related_view = '%s-%s' % (self.rtype, name)
             related_view = related_view.replace('_', '-')
             relationships[name] = {
@@ -135,7 +141,7 @@ class JsonApiSerializerMixin:
             # prune the dict of all related field errors
             for field in list(exc.detail):
                 for error in exc.detail[field]:
-                    if field in self.related_fields:
+                    if field in self._related_field_names:
                         excs.append(RelationshipError(field, error))
                         del exc.detail[field]
 
@@ -168,9 +174,6 @@ class JsonApiSerializerMixin:
         """ DRF override return an individual "Resource Object" object
 
         The renderer will later wrap it with the "Top Level" members.
-
-        :spec:
-            jsonapi.org/format/#document-resource-objects
         """
 
         data = super().to_representation(instance)
