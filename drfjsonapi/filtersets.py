@@ -5,6 +5,8 @@
     Interface for handling the JSON API filter query parameters.
 """
 
+import re
+
 from django.db.models import Q
 from rest_framework.exceptions import ValidationError
 from .exceptions import InvalidFilterParam
@@ -13,42 +15,58 @@ from .exceptions import InvalidFilterParam
 class JsonApiFilterSet:
     """ This should be subclassed by custom FilterSets """
 
-    max_filters = 15
+    fields = {}
+    max_params = 15
 
-    def __init__(self, context=None, filterable_fields=None):
+    def __init__(self, context=None):
         """ Context will include the request & view """
 
         self.context = context or {}
-        self.filterable_fields = filterable_fields or {}
 
-    def get_filter_expression(self, param, value):
-        """ Return a valid django filter expression for the query param """
-
-        return Q((param, value))
-
-    def get_filter_expressions(self, data):
+    def filter_queryset(self, queryset, filters):
         """ Turn the vetted query param filters into Q object expressions """
 
-        ret = Q()
-        for param, value in data.items():
-            ret.add(self.get_filter_expression(param, value), Q.AND)
-        return ret
+        q_filter = Q()
+        for param, value in filters.items():
+            q_filter.add(Q((param, value)), Q.AND)
+        return queryset.filter(q_filter).distinct()
 
-    def to_internal_value(self, data):
-        """ Coerce & validate the query params & values """
+    def to_internal_value(self, request):
+        """ Coerce & validate the query params & values
 
-        if len(data) > self.max_filters:
-            msg = 'The request has "%s" filter query parameters which ' \
-                  'exceeds the max number of "%s" that can be requested.' \
-                  % (len(data), self.max_filters)
-            raise InvalidFilterParam(msg)
+        Loop through all the query parameters & use a regular
+        expression to find all the filters that match a format
+        of:
 
-        return {k: self.validate_filter(k, v) for k, v in data.items()}
+            filter[<field>__<lookup>]=<value>
 
-    def validate(self, data):
+        An example filter of `filter[home__city__exact]=Orlando`
+        would return a dict of:
+
+            {'home__city__exact': 'Orlando'}
+
+        """
+
+        filters = {}
+        regex = re.compile(r'^filter\[([A-Za-z0-9_.]+)\]$')
+        for param, value in request.query_params.items():
+            try:
+                param = regex.match(param).groups()[0]
+                filters[param] = value
+            except (AttributeError, IndexError):
+                continue
+        return filters
+
+    def validate(self, filters):
         """ Hook to validate the coerced data """
 
-        return data
+        if len(filters) > self.max_params:
+            msg = 'The request has "%s" filter query parameters which ' \
+                  'exceeds the max number of "%s" that can be requested.' \
+                  % (len(filters), self.max_params)
+            raise InvalidFilterParam(msg)
+
+        return {k: self.validate_filter(k, v) for k, v in filters.items()}
 
     def validate_filter(self, param, value):
         """ Coerce & validate each query param & value one-by-one """

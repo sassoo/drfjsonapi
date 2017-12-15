@@ -6,14 +6,8 @@
     compliant API.
 """
 
-import re
-
-from django.core.exceptions import ImproperlyConfigured
-from rest_framework.filters import (
-    BaseFilterBackend,
-    OrderingFilter as _OrderingFilter,
-)
-from .exceptions import InvalidIncludeParam, InvalidSortParam
+from rest_framework.filters import BaseFilterBackend, OrderingFilter
+from .exceptions import InvalidFilterParam, InvalidIncludeParam, InvalidSortParam
 
 
 class JsonApiFilter(object):
@@ -38,45 +32,21 @@ class FieldFilter(JsonApiFilter, BaseFilterBackend):
 
         try:
             filterset = view.get_filterset()
-            if not filterset:
-                raise AttributeError
         except AttributeError:
-            msg = 'Using "%s" requires a view that returns a filterset ' \
-                  'from "get_filterset()"' % self.__class__.__name__
-            raise ImproperlyConfigured(msg)
+            filterset = None
 
-        filters = self.parse(request)
-        if filters:
-            filters = filterset.to_internal_value(filters)
+        if not filterset and 'filter' in request.query_params.keys():
+            raise InvalidFilterParam('"filter" query parameters are not supported')
+
+        filters = ()
+
+        if filterset:
+            filters = filterset.to_internal_value(request)
             filters = filterset.validate(filters)
-            q_filter = filterset.get_filter_expressions(filters)
-            queryset = queryset.filter(q_filter).distinct()
+            queryset = filterset.filter_queryset(queryset, filters)
+
+        request.jsonapi_filter = filters
         return queryset
-
-    def parse(self, request):
-        """ Return the sanitized `filter` query parameters
-
-        Loop through all the query parameters & use a regular
-        expression to find all the filters that match a format
-        of:
-
-            filter[<field>__<lookup>]=<value>
-
-        An example filter of `filter[home__city__exact]=Orlando`
-        would return a dict of:
-
-            {'home__city__exact': 'Orlando'}
-        """
-
-        filters = {}
-        regex = re.compile(r'^filter\[([A-Za-z0-9_.]+)\]$')
-        for param, value in request.query_params.items():
-            try:
-                param = regex.match(param).groups()[0]
-                filters[param] = value
-            except (AttributeError, IndexError):
-                continue
-        return filters
 
 
 class IncludeFilter(JsonApiFilter, BaseFilterBackend):
@@ -85,6 +55,9 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
     The `filter_queryset` entry point method requires the view provided
     to have an `includeset_class` attribute or IncludeSet instance
     returned from the views `get_includeset()`.
+
+    The santizied includes query params will be available on the
+    request object via a `jsonapi_include` attribute.
     """
 
     def filter_queryset(self, request, queryset, view):
@@ -109,30 +82,8 @@ class IncludeFilter(JsonApiFilter, BaseFilterBackend):
         return queryset
 
 
-class OrderingFilter(JsonApiFilter, _OrderingFilter):
+class SortFilter(JsonApiFilter, OrderingFilter):
     """ Override default OrderingFilter to be JSON API compliant
-
-    JSON API details
-    ~~~~~~~~~~~~~~~~
-
-    The JSON API spec reserves the `sort` query parameter for
-    ordering.
-
-    This filter can be used to support the `sort` query param
-    for requesting ordering preferences on the primary data &
-    is JSON API compliant in the following mentionable ways:
-
-        1. An endpoint MAY support multiple sort fields by
-           allowing comma-separated (U+002C COMMA, ",") sort
-           fields. Sort fields SHOULD be applied in the order
-           specified.
-
-        2. The sort order for each sort field MUST be ascending
-           unless it is prefixed with a minus (U+002D HYPHEN-MINUS, "-"),
-           in which case it MUST be descending.
-
-    Implementation details
-    ~~~~~~~~~~~~~~~~~~~~~~
 
     If the global `max_sorts` property limit is not exceeded then
     each sort is tested for eligibility.  To be eligible is MUST

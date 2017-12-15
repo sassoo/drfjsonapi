@@ -18,10 +18,6 @@ from rest_framework.views import exception_handler
 from .exceptions import (
     FieldError,
     InternalError,
-    InvalidFieldParam,
-    InvalidFilterParam,
-    InvalidPageParam,
-    InvalidSortParam,
     ManyExceptions,
     ResourceError,
     ResourceNotFound,
@@ -30,11 +26,10 @@ from .exceptions import (
 from .filters import (
     FieldFilter,
     IncludeFilter,
-    OrderingFilter,
+    SortFilter,
 )
-from .filtersets import JsonApiFilterSet
 from .renderers import JsonApiRenderer
-from .pagination import JsonApiPagination, LimitOffsetPagination
+from .pagination import LimitOffsetPagination
 from .parsers import JsonApiResourceParser
 
 
@@ -123,7 +118,7 @@ class JsonApiViewMixin:
     enabled on the view, via this modules filter_backends.
     """
 
-    filter_backends = (FieldFilter, IncludeFilter, OrderingFilter)
+    filter_backends = (FieldFilter, IncludeFilter, SortFilter)
     pagination_class = LimitOffsetPagination
     parser_classes = (JsonApiResourceParser,)
     renderer_classes = (JsonApiRenderer,)
@@ -146,11 +141,10 @@ class JsonApiViewMixin:
         """ Return a filterset instance from the `filterset_class` property """
 
         try:
-            return self.filterset_class(context=self.get_serializer_context())
+            context = {'view': self, 'request': self.request}
+            return self.filterset_class(context=context)
         except AttributeError:
-            filterable_fields = getattr(self, 'filterable_fields', {})
-            return JsonApiFilterSet(context=self.get_serializer_context(),
-                                    filterable_fields=filterable_fields)
+            return None
 
     def get_includeset(self):
         """ Return an includeset instance from the `includeset_class` property """
@@ -167,29 +161,6 @@ class JsonApiViewMixin:
         context = super().get_serializer_context()
         context['include'] = getattr(self.request, 'jsonapi_include', ())
         return context
-
-    def initial(self, request, *args, **kwargs):
-        """ DRF override to enforce spec compliance as early as possible """
-
-        ret = super().initial(request, *args, **kwargs)
-        filters = self.filter_backends
-
-        for param in request.query_params.keys():
-            if param.startswith('fields['):
-                msg = '"field" query parameters are not supported'
-                raise InvalidFieldParam(msg)
-            elif param.startswith('filter[') and FieldFilter not in filters:
-                msg = '"filter" query parameters are not supported'
-                raise InvalidFilterParam(msg)
-            elif param.startswith('page['):
-                if not issubclass(self.pagination_class, JsonApiPagination):
-                    msg = '"page" query parameters are not supported'
-                    raise InvalidPageParam(msg)
-            elif param == 'sort' and OrderingFilter not in filters:
-                msg = '"sort" query parameters are not supported'
-                raise InvalidSortParam(msg)
-
-        return ret
 
     def render_related_view(self, field, view_name):
         """ Render the related view of a single resource

@@ -8,7 +8,7 @@
 from django.core.exceptions import ObjectDoesNotExist
 
 
-def _get_related_field(model, field_name):
+def _get_relationship(model, field_name):
     """ Get the model(s) from a Django related field
 
     If it's a many relationship then it will have the `all()`
@@ -26,3 +26,14 @@ def _get_related_field(model, field_name):
         return None
     except AttributeError:
         return getattr(model, field_name)
+
+
+def _to_set(obj):
+    """ Given an object wrap it in a set """
+
+    try:
+        return set(obj)
+    except TypeError:
+        if obj is None:
+            return set()
+        return set((obj,))

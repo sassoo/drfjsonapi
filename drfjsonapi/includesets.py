@@ -5,23 +5,22 @@
     Interface for handling the JSON API include query parameters.
 """
 
-import copy
 import itertools
 
 from .exceptions import InvalidIncludeParam
-from .utils import _get_related_field
+from .utils import _get_relationship, _to_set
 
 
 class JsonApiIncludeSet:
     """ This should be subclassed by custom IncludeSets """
 
-    includable_fields = {}
+    fields = {}
     max_params = 15
 
     def __init__(self, context=None):
         """ Context will include the request & view """
 
-        self.context = copy.copy(context) or {}
+        self.context = context or {}
 
     def filter_queryset(self, queryset, include):
         """ Return a filtered queryset for the query params """
@@ -40,50 +39,39 @@ class JsonApiIncludeSet:
         include = list(itertools.chain(*include))
         return tuple(set(include))
 
-    def to_representation(self, instance):
-        """ Return the JSON API include array
+    def to_representation(self, serializer):
+        """ Return the JSON API include array """
 
-        `instance` could be an empty array, non-empty array of models
-        or even a single non-iterable model instance.
-        """
+        if not serializer.instance:
+            return []
 
-        def _update_cache(model):
-            """ XXX """
+        try:
+            include = self.context.get('request').jsonapi_include
+        except AttributeError:
+            return []
 
+        # uniqifies duplicate serializers & models by using
+        # the serializer as a key & set as value
+        icache = {v: set() for k, v in self.fields.items()}
+        models = _to_set(serializer.instance)
+
+        for model in models:
             for field in include:
-                serializer = self.includable_fields[field]
-                rels = _get_related_field(model, field)
-                if rels:
-                    try:
-                        include_cache[serializer].update(rels)
-                    except TypeError:
-                        include_cache[serializer].add(rels)
+                cache_set = icache[self.fields[field]]
+                relationships = _get_relationship(model, field)
+                cache_set.update(_to_set(relationships))
 
-        if not instance:
-            return []
+        # prune dupes in the include cache that are also present
+        # in the primary data.
+        _class = serializer.__class__
+        if _class in icache:
+            icache[_class] = icache[_class].difference(models)
 
-        try:
-            include = self.context['request'].jsonapi_include
-        except (AttributeError, KeyError):
-            return []
-
-        # this basically uniquifies duplicate serializers & items
-        # by using the serializer as a key & set as value
-        include_cache = {
-            serializer: set()
-            for field, serializer in self.includable_fields.items()
-        }
-
-        try:
-            for model in instance:
-                _update_cache(model)
-        except TypeError:
-            _update_cache(instance)
-
-        included = [
+        included = (
             serializer(context=self.context, many=True).to_representation(models)
-            for serializer, models in include_cache.items()
-        ]
+            for serializer, models in icache.items()
+        )
+        # flatten the list of lists
         return list(itertools.chain(*included))
 
     def validate(self, include):
@@ -96,7 +84,7 @@ class JsonApiIncludeSet:
             raise InvalidIncludeParam(msg)
 
         for name in include:
-            if name not in self.includable_fields:
+            if name not in self.fields:
                 msg = 'The "%s" include query parameter is not supported ' \
                       'by this endpoint.' % name
                 raise InvalidIncludeParam(msg)

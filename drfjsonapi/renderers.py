@@ -11,8 +11,8 @@ from rest_framework.renderers import JSONRenderer
 class JsonApiRenderer(JSONRenderer):
     """ JSON API compliant DRF renderer
 
-    Inherit from the DRF JSONRenderer since JSON API is
-    simply a structured representation of JSON.
+    Inherit from the DRF JSONRenderer since JSON API is simply a
+    structured representation of JSON.
     """
 
     media_type = 'application/vnd.api+json'
@@ -25,17 +25,16 @@ class JsonApiRenderer(JSONRenderer):
         """
 
         try:
-            models = data.serializer.instance
             includeset = context['view'].get_includeset()
-            return includeset.to_representation(models)
-        except (AttributeError, KeyError, TypeError):
+            return includeset.to_representation(data.serializer)
+        except (AttributeError, KeyError):
             return []
 
     def get_links(self, pager, context) -> dict:
         """ Return the top level "Links" object
 
-        According to the JSON API spec this should include
-        the required pagination links.
+        According to the JSON API spec this should include the
+        required pagination links.
 
         :spec:
             jsonapi.org/format/#document-links
@@ -51,6 +50,7 @@ class JsonApiRenderer(JSONRenderer):
         """ DRF override & entry point
 
         `data` can be quite a few different data formats unforutnately.
+
         It could be a single resource dict, None (no single resource),
         an array of many resource dicts with paging info, an empty array,
         or an "Errors" object.
