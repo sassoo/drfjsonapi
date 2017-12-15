@@ -42,12 +42,8 @@ class JsonApiIncludeSet:
     def to_representation(self, serializer):
         """ Return the JSON API include array """
 
-        if not serializer.instance:
-            return []
-
-        try:
-            include = self.context.get('request').jsonapi_include
-        except AttributeError:
+        include = getattr(self.context.get('request'), 'jsonapi_include', None)
+        if not include or not serializer.instance:
             return []
 
         # uniqifies duplicate serializers & models by using
@@ -58,8 +54,7 @@ class JsonApiIncludeSet:
         for model in models:
             for field in include:
                 cache_set = icache[self.fields[field]]
-                relationships = _get_relationship(model, field)
-                cache_set.update(_to_set(relationships))
+                cache_set.update(_to_set(_get_relationship(model, field)))
 
         # prune dupes in the include cache that are also present
         # in the primary data.
@@ -67,12 +62,10 @@ class JsonApiIncludeSet:
         if _class in icache:
             icache[_class] = icache[_class].difference(models)
 
-        included = (
-            serializer(context=self.context, many=True).to_representation(models)
-            for serializer, models in icache.items()
-        )
-        # flatten the list of lists
-        return list(itertools.chain(*included))
+        return [
+            serializer(context=self.context).to_representation(model)
+            for serializer, models in icache.items() for model in models
+        ]
 
     def validate(self, include):
         """ Hook to validate the coerced include """

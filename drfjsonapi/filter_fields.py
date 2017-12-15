@@ -34,10 +34,10 @@ class FilterField:
     drf_field = None
     lookups = ()
 
-    def __init__(self, **kwargs):
+    def __init__(self, drf_field=None, lookups=None):
 
-        self.field = kwargs.get('field', self.drf_field)
-        self.lookups = kwargs.get('lookups', self.lookups)
+        self.field = drf_field or self.drf_field
+        self.lookups = lookups or self.lookups
 
     def validate(self, lookup, value):
         """ Run the fields natve `run_validation` method
