@@ -24,6 +24,7 @@ from .exceptions import (
     ResourceNotFound,
     RouteNotFound,
 )
+from .filters import JsonApiIncludeFilter
 from .renderers import JsonApiRenderer
 from .pagination import LimitOffsetPagination
 from .parsers import JsonApiResourceParser
@@ -131,6 +132,15 @@ class JsonApiViewMixin:
 
         view.check_permissions(self.request)
         return view
+
+    def get_included(self, serializer):
+        """ Return the list of included resource objects """
+
+        context = {'request': self.request, 'view': self}
+        for backend in self.filter_backends:
+            if issubclass(backend, JsonApiIncludeFilter):
+                return backend().to_representation(serializer, context=context)
+        return []
 
     def get_serializer_context(self):
         """ DRF override to inform serializers which related fields to include """

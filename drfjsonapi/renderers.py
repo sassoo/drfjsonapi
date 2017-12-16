@@ -25,8 +25,7 @@ class JsonApiRenderer(JSONRenderer):
         """
 
         try:
-            includeset = context['view'].get_includeset()
-            return includeset.to_representation(data.serializer)
+            return context['view'].get_included(data.serializer)
         except (AttributeError, KeyError):
             return []
 

@@ -137,10 +137,14 @@ class JsonApiIncludeFilter(JsonApiBackend, BaseFilterBackend):
         include = list(itertools.chain(*include))
         return tuple(set(include))
 
-    def to_representation(self, serializer):
+    def to_representation(self, serializer, context=None):
         """ Return the JSON API include array """
 
-        include = getattr(self.context.get('request'), 'jsonapi_include', None)
+        try:
+            include = context['request'].jsonapi_include
+        except (AttributeError, KeyError, TypeError):
+            include = []
+
         if not include or not serializer.instance:
             return []
 
@@ -161,7 +165,7 @@ class JsonApiIncludeFilter(JsonApiBackend, BaseFilterBackend):
             icache[_class] = icache[_class].difference(models)
 
         return [
-            serializer(context=self.context).to_representation(model)
+            serializer(context=context).to_representation(model)
             for serializer, models in icache.items() for model in models
         ]
 
