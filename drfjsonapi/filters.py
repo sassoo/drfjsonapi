@@ -41,7 +41,7 @@ class JsonApiFieldFilter(JsonApiBackend, BaseFilterBackend):
         q_filter = Q()
         for param, value in filters.items():
             q_filter.add(Q((param, value)), Q.AND)
-        return queryset.filter(q_filter).distinct()
+        return queryset.filter(q_filter)
 
     def to_internal_value(self, request):
         """ Coerce & validate the query params & values
