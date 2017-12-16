@@ -87,7 +87,7 @@ class JsonApiFieldFilter(JsonApiBackend, BaseFilterBackend):
         field, _, lookup = param.rpartition('__')
 
         try:
-            validator = self.filterable_fields[field]
+            validator = self.fields[field]
             return validator.validate(lookup, value)
         except KeyError:
             msg = 'The "%s" filter query parameter is invalid, the ' \
