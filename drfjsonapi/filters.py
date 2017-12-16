@@ -6,83 +6,183 @@
     compliant API.
 """
 
+import itertools
+import re
+
+from django.db.models import Q
+from rest_framework.exceptions import ValidationError
 from rest_framework.filters import BaseFilterBackend, OrderingFilter
+
 from .exceptions import InvalidFilterParam, InvalidIncludeParam, InvalidSortParam
+from .utils import _get_relationship, _to_set
 
 
-class JsonApiFilter(object):
+class JsonApiBackend(object):
     """ For easy `isinstance` checks """
     pass
 
 
-class FieldFilter(JsonApiFilter, BaseFilterBackend):
-    """ Support the filtering of arbitrary resource fields
+class JsonApiFieldFilter(JsonApiBackend, BaseFilterBackend):
+    """ Support the filtering of arbitrary resource fields """
 
-    The `filter_queryset` entry point method requires the view
-    provided to have a `get_filterset` method which is already
-    present on DRF GenericAPIView instances & it MUST return a
-    JsonApiFilterset for the primary data.
-
-    That filterset will be used to validate the `filter` query
-    param values.
-    """
+    fields = {}
+    max_params = 15
 
     def filter_queryset(self, request, queryset, view):
         """ DRF entry point into the custom FilterBackend """
 
+        filters = self.to_internal_value(request)
+        filters = self.validate(filters)
+        return self.apply_filter(queryset, filters)
+
+    def apply_filter(self, queryset, filters):
+        """ Turn the vetted query param filters into Q object expressions """
+
+        q_filter = Q()
+        for param, value in filters.items():
+            q_filter.add(Q((param, value)), Q.AND)
+        return queryset.filter(q_filter).distinct()
+
+    def to_internal_value(self, request):
+        """ Coerce & validate the query params & values
+
+        Loop through all the query parameters & use a regular
+        expression to find all the filters that match a format
+        of:
+
+            filter[<field>__<lookup>]=<value>
+
+        An example filter of `filter[home__city__exact]=Orlando`
+        would return a dict of:
+
+            {'home__city__exact': 'Orlando'}
+
+        """
+
+        filters = {}
+        regex = re.compile(r'^filter\[([A-Za-z0-9_.]+)\]$')
+        for param, value in request.query_params.items():
+            try:
+                param = regex.match(param).groups()[0]
+                filters[param] = value
+            except (AttributeError, IndexError):
+                continue
+        return filters
+
+    def validate(self, filters):
+        """ Hook to validate the coerced data """
+
+        if len(filters) > self.max_params:
+            msg = 'The request has "%s" filter query parameters which ' \
+                  'exceeds the max number of "%s" that can be requested.' \
+                  % (len(filters), self.max_params)
+            raise InvalidFilterParam(msg)
+
+        return {k: self.validate_filter(k, v) for k, v in filters.items()}
+
+    def validate_filter(self, param, value):
+        """ Coerce & validate each query param & value one-by-one """
+
+        # pylint: disable=invalid-name,unused-variable
+        field, _, lookup = param.rpartition('__')
+
         try:
-            filterset = view.get_filterset()
-        except AttributeError:
-            filterset = None
-
-        if not filterset and 'filter' in request.query_params.keys():
-            raise InvalidFilterParam('"filter" query parameters are not supported')
-
-        filters = ()
-
-        if filterset:
-            filters = filterset.to_internal_value(request)
-            filters = filterset.validate(filters)
-            queryset = filterset.filter_queryset(queryset, filters)
-
-        request.jsonapi_filter = filters
-        return queryset
+            validator = self.filterable_fields[field]
+            return validator.validate(lookup, value)
+        except KeyError:
+            msg = 'The "%s" filter query parameter is invalid, the ' \
+                  '"%s" field either does not exist on the requested ' \
+                  'resource or you are not allowed to filter on it.' \
+                  % (param, field)
+            raise InvalidFilterParam(msg)
+        except ValidationError as exc:
+            msg = 'The "%s" filter query parameters value failed ' \
+                  'validation checks with the following error(s): ' \
+                  '%s' % (param, ' '.join(exc.detail))
+            raise InvalidFilterParam(msg)
 
 
-class IncludeFilter(JsonApiFilter, BaseFilterBackend):
+class JsonApiIncludeFilter(JsonApiBackend, BaseFilterBackend):
     """ Support the inclusion of compound documents
-
-    The `filter_queryset` entry point method requires the view provided
-    to have an `includeset_class` attribute or IncludeSet instance
-    returned from the views `get_includeset()`.
 
     The santizied includes query params will be available on the
     request object via a `jsonapi_include` attribute.
     """
 
+    fields = {}
+    max_params = 15
+
     def filter_queryset(self, request, queryset, view):
         """ DRF entry point into the custom FilterBackend """
 
-        try:
-            includeset = view.get_includeset()
-        except AttributeError:
-            includeset = None
-
-        if not includeset and 'include' in request.query_params.keys():
-            raise InvalidIncludeParam('"include" query parameters are not supported')
-
-        include = ()
-
-        if includeset:
-            include = includeset.to_internal_value(request)
-            include = includeset.validate(include)
-            queryset = includeset.filter_queryset(queryset, include)
-
+        include = self.to_internal_value(request)
+        include = self.validate(include)
         request.jsonapi_include = include
-        return queryset
+        return self.apply_filter(queryset, include)
+
+    def apply_filter(self, queryset, include):
+        """ Return a filtered queryset for the query params """
+
+        return queryset.prefetch_related(*include)
+
+    def to_internal_value(self, request):
+        """ Return the sanitized `include` query parameters
+
+        Handles comma separated & multiple include params & returns
+        a tuple of duplicate free strings
+        """
+
+        include = request.query_params.getlist('include')
+        include = (name.split(',') for name in include)
+        include = list(itertools.chain(*include))
+        return tuple(set(include))
+
+    def to_representation(self, serializer):
+        """ Return the JSON API include array """
+
+        include = getattr(self.context.get('request'), 'jsonapi_include', None)
+        if not include or not serializer.instance:
+            return []
+
+        # uniqifies duplicate serializers & models by using
+        # the serializer as a key & set as value
+        icache = {v: set() for k, v in self.fields.items()}
+        models = _to_set(serializer.instance)
+
+        for model in models:
+            for field in include:
+                cache_set = icache[self.fields[field]]
+                cache_set.update(_to_set(_get_relationship(model, field)))
+
+        # prune dupes in the include cache that are also present
+        # in the primary data.
+        _class = serializer.__class__
+        if _class in icache:
+            icache[_class] = icache[_class].difference(models)
+
+        return [
+            serializer(context=self.context).to_representation(model)
+            for serializer, models in icache.items() for model in models
+        ]
+
+    def validate(self, include):
+        """ Hook to validate the coerced include """
+
+        if len(include) > self.max_params:
+            msg = 'The request has "%s" include query parameters which ' \
+                  'exceeds the max number of "%s" that can be requested.' \
+                  % (len(include), self.max_params)
+            raise InvalidIncludeParam(msg)
+
+        for name in include:
+            if name not in self.fields:
+                msg = 'The "%s" include query parameter is not supported ' \
+                      'by this endpoint.' % name
+                raise InvalidIncludeParam(msg)
+        return include
 
 
-class SortFilter(JsonApiFilter, OrderingFilter):
+class JsonApiSortFilter(JsonApiBackend, OrderingFilter):
     """ Override default OrderingFilter to be JSON API compliant
 
     If the global `max_sorts` property limit is not exceeded then
