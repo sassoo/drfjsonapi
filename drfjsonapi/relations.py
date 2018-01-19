@@ -52,9 +52,16 @@ class JsonApiRelatedField(SlugRelatedField):
         return instance
 
     def to_representation(self, obj):
-        """ DRF override during serialization """
+        """ DRF override during serialization
 
-        return {
-            'id': str(super().to_representation(obj)),
-            'type': self.get_rtype(obj),
-        }
+        `to_representation` could return None if the relationship
+        was cleared (OneToOne) & deleted but still present in
+        memory.
+        """
+
+        ret = super().to_representation(obj)
+        if ret is not None:
+            return {
+                'id': str(ret),
+                'type': self.get_rtype(obj),
+            }
