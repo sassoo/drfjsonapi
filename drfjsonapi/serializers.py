@@ -180,7 +180,7 @@ class JsonApiSerializerMixin:
 
         try:
             links = {'self': reverse(self.rtype + '-detail', args=[instance.pk])}
-        except NoReverseMatch:
+        except (AttributeError, NoReverseMatch):
             links = {}
 
         return {
