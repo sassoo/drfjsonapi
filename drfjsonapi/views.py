@@ -8,9 +8,9 @@
 import traceback
 
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
-from django.core.urlresolvers import resolve, reverse
-from django.utils.crypto import get_random_string
 from django.http import Http404
+from django.urls import resolve, reverse
+from django.utils.crypto import get_random_string
 from rest_framework import exceptions
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
