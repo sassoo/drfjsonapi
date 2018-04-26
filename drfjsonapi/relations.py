@@ -42,7 +42,11 @@ class JsonApiRelatedField(SlugRelatedField):
             }
         """
 
-        rid, rtype = data['id'], data['type']
+        try:
+            rid, rtype = data['id'], data['type']
+        except TypeError:
+            self.fail('invalid')
+
         # raises exc if not found, instance guaranteed
         instance = super().to_internal_value(rid)
 
@@ -65,3 +69,4 @@ class JsonApiRelatedField(SlugRelatedField):
                 'id': str(ret),
                 'type': self.get_rtype(obj),
             }
+        return None
