@@ -55,6 +55,13 @@ class JsonApiRenderer(JSONRenderer):
         or an "Errors" object.
         """
 
+        try:
+            status = renderer_context['response'].status_code
+            if status <= 199 or status == 204:
+                return super().render(data, accepted_media_type, renderer_context)
+        except(AttributeError, KeyError, TypeError):
+            pass
+
         if data and 'errors' in data:
             return super().render(data, accepted_media_type, renderer_context)
 
