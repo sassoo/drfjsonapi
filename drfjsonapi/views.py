@@ -75,6 +75,10 @@ def jsonapi_exception_handler(exc, context):
         excs = ManyExceptions([])
         for field, errors in exc.detail.items():
             for error in errors:
+                try:
+                    error = str(errors[error][0])
+                except (KeyError, TypeError):
+                    pass
                 excs.excs.append(FieldError('/' + field, error))
         exc = excs
     elif isinstance(exc, ValidationError) and hasattr(exc, 'message_dict'):
