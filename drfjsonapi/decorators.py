@@ -5,7 +5,7 @@
     Custom decorators mostly for specialized views
 """
 
-from rest_framework.decorators import detail_route
+from rest_framework.decorators import action
 
 
 def related_route(*args, **kwargs):
@@ -29,13 +29,13 @@ def related_route(*args, **kwargs):
     """
 
     kwargs['filter_backends'] = kwargs.pop('filter_backends', ())
-    return detail_route(*args, **kwargs)
+    return action(*args, detatil=True, **kwargs)
 
 
 def relationship_route(*args, **kwargs):
     """ Convenience decorator to support a JSON API relationship link
 
-    Instead of using a DRF detail_route decorator when constructing
+    Instead of using a DRF action decorator when constructing
     views that would resolve "Relationship Links" according
     to the JSON API spec, you should use this decorator.
 
@@ -45,4 +45,4 @@ def relationship_route(*args, **kwargs):
 
     kwargs['filter_backends'] = kwargs.pop('filter_backends', ())
     kwargs['url_path'] = 'relationships/%s' % kwargs.pop('relation')
-    return detail_route(*args, **kwargs)
+    return action(*args, defail=True, **kwargs)
