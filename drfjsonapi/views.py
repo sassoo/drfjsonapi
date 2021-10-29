@@ -101,7 +101,7 @@ def jsonapi_exception_handler(exc, context):
 
 
 @api_view()
-def page_not_found():
+def page_not_found(request):
     """ Custom 404 endpoint not found view """
 
     raise RouteNotFound()
