@@ -106,7 +106,7 @@ class ListFilterField(FilterField):
     """ General ListField filter with common list lookups """
 
     drf_field = serializers.ListField()
-    lookups = ('contains',)
+    lookups = ('in',)
 
     def validate(self, lookup, value):
         """ FilterField override to ensure value is a list """
