@@ -29,7 +29,7 @@ def related_route(*args, **kwargs):
     """
 
     kwargs['filter_backends'] = kwargs.pop('filter_backends', ())
-    return action(*args, detatil=True, **kwargs)
+    return action(*args, detail=True, **kwargs)
 
 
 def relationship_route(*args, **kwargs):
@@ -45,4 +45,4 @@ def relationship_route(*args, **kwargs):
 
     kwargs['filter_backends'] = kwargs.pop('filter_backends', ())
     kwargs['url_path'] = 'relationships/%s' % kwargs.pop('relation')
-    return action(*args, defail=True, **kwargs)
+    return action(*args, detail=True, **kwargs)
