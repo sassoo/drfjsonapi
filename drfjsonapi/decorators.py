@@ -29,6 +29,7 @@ def related_route(*args, **kwargs):
     """
 
     kwargs['filter_backends'] = kwargs.pop('filter_backends', ())
+    kwargs['url_name'] = kwargs.get('url_name', kwargs['url_path'])
     return action(*args, detail=True, **kwargs)
 
 
