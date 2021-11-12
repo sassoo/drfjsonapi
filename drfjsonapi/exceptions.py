@@ -62,7 +62,7 @@ class InvalidQueryParam(JsonApiException):
     default_detail = 'Your request had an invalid query parameter.'
     link = 'https://tools.ietf.org/html/rfc7231#section-6.5.1'
     status_code = status.HTTP_400_BAD_REQUEST
-    title = 'Invalid or corrupt query parameter'
+    title = 'Invalid, missing, or corrupt query parameter'
 
 
 class InvalidFieldParam(InvalidQueryParam):
